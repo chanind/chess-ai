@@ -12,10 +12,12 @@ def train(
     model: ChessValueModel,
     epochs: int = 100,
     batch_size: int = 256,
-    max_samples = None
+    max_samples=None,
 ):
     chess_dataset = ChessDataset(max_samples)
-    train_loader = torch.utils.data.DataLoader(chess_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = torch.utils.data.DataLoader(
+        chess_dataset, batch_size=batch_size, shuffle=True
+    )
     optimizer = optim.Adam(model.parameters())
     floss = nn.MSELoss()
 
@@ -41,7 +43,7 @@ def train(
                 loss = floss(output, target)
                 loss.backward()
                 optimizer.step()
-                
+
                 all_loss += loss.item()
                 num_loss += 1
                 pbar.update(data.shape[0])
@@ -51,8 +53,9 @@ def train(
                     }
                 )
 
+
 if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = ChessValueModel()
-    train(device, model)
+    train(device, model, max_samples=1000)
     torch.save(model.state_dict(), "chess_value_model.pth")
