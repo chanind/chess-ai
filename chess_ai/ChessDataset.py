@@ -37,7 +37,7 @@ class ChessDataset(Dataset):
                     break
                 games_counter += 1
                 if games_counter % 50 == 0:
-                    print(f"{len(X)} samples from {games_counter} games", end="\r")
+                    print(f"\r{len(X)} samples from {games_counter} games", end="")
         self.X = torch.stack(X)
         self.Y = torch.Tensor(Y)
         print("loaded", self.X.shape, self.Y.shape)
