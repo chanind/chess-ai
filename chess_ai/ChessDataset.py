@@ -14,7 +14,7 @@ class ChessDataset(Dataset):
     def __init__(self, max_samples=None):
         X = []
         Y = []
-        gn = 0
+        games_counter = 0
         values = {"1/2-1/2": 0, "0-1": -1, "1-0": 1}
         # pgn files in the data folder
         for games_file in os.listdir(DATA_DIR):
@@ -35,9 +35,9 @@ class ChessDataset(Dataset):
                     Y.append(value)
                 if max_samples is not None and len(X) > max_samples:
                     break
-                gn += 1
-                if gn % 100 == 0:
-                    print(".")
+                games_counter += 1
+                if games_counter % 50 == 0:
+                    print(f"{len(X)} samples from {games_counter} games", end="\r")
         self.X = torch.stack(X)
         self.Y = torch.Tensor(Y)
         print("loaded", self.X.shape, self.Y.shape)
