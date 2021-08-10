@@ -1,8 +1,32 @@
 # based on https://github.com/geohot/twitchchess/blob/master/state.py
 
+from typing import Optional, Tuple
 import chess
 import torch
 from torch.nn.functional import one_hot
+import numpy as np
+
+
+def serialization_to_tensor(
+    serialization: Tuple[np.array, np.array, Optional[int], int]
+) -> torch.Tensor:
+    (pieces_state, castling_state, en_passant_state, turn) = serialization
+    one_hot_pieces_state = one_hot(
+        torch.from_numpy(pieces_state).type(torch.int64), num_classes=13
+    ).view((-1))
+    one_hot_en_passant_state = torch.zeros(64, dtype=torch.float)
+    if en_passant_state is not None:
+        en_passant_state = one_hot(torch.tensor(en_passant_state), num_classes=64)
+    castling_state_tensor = torch.from_numpy(castling_state)
+    bstate = torch.cat(
+        [
+            one_hot_pieces_state,
+            castling_state_tensor,
+            one_hot_en_passant_state,
+            torch.tensor(turn * 1.0).unsqueeze(0),
+        ]
+    )
+    return bstate.float()
 
 
 class State(object):
@@ -20,14 +44,14 @@ class State(object):
             self.board.ep_square,
         )
 
-    def serialize(self) -> torch.Tensor:
+    def serialize(self) -> Tuple[np.array, np.array, Optional[int], int]:
         assert self.board.is_valid()
 
-        raw_pieces_state = torch.zeros(64, dtype=torch.int64)
+        pieces_state = np.zeros(64, np.uint8)
         for i in range(64):
             pp = self.board.piece_at(i)
             if pp is not None:
-                raw_pieces_state[i] = {
+                pieces_state[i] = {
                     "P": 1,
                     "N": 2,
                     "B": 3,
@@ -41,10 +65,8 @@ class State(object):
                     "q": 11,
                     "k": 12,
                 }[pp.symbol()]
-        one_hot_pieces_state = one_hot(raw_pieces_state, num_classes=13)
-        pieces_state = one_hot_pieces_state.view((-1))
 
-        castling_state = torch.zeros(4, dtype=torch.int64)
+        castling_state = np.zeros(4, np.uint8)
         if self.board.has_queenside_castling_rights(chess.WHITE):
             castling_state[0] = 1
         if self.board.has_kingside_castling_rights(chess.WHITE):
@@ -54,13 +76,10 @@ class State(object):
         if self.board.has_kingside_castling_rights(chess.BLACK):
             castling_state[3] = 1
 
-        en_passant_state = torch.zeros(64, dtype=torch.int64)
-        if self.board.ep_square is not None:
-            en_passant_state = one_hot(
-                torch.tensor(self.board.ep_square, dtype=torch.int64), num_classes=64
-            )
+        en_passant_state = self.board.ep_square
 
-        turn = torch.tensor(self.board.turn * 1.0, dtype=torch.int64).unsqueeze(0)
-        bstate = torch.cat([pieces_state, castling_state, en_passant_state, turn])
+        turn = self.board.turn
+        # bstate = torch.cat([pieces_state, castling_state, en_passant_state, turn])
 
-        return bstate
+        # returning these partially processed parts as a tuple to have lower memory usage in dataloader
+        return (pieces_state, castling_state, en_passant_state, turn)

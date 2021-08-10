@@ -5,15 +5,15 @@ from chess.pgn import read_game
 from pathlib import Path
 import torch
 
-from .State import State
+from .State import State, serialization_to_tensor
 
 DATA_DIR = (Path(__file__) / ".." / ".." / "data").resolve()
 
 
 class ChessDataset(Dataset):
     def __init__(self, max_samples=None):
-        X = []
-        Y = []
+        self.X = []
+        self.Y = []
         games_counter = 0
         values = {"1/2-1/2": 0, "0-1": -1, "1-0": 1}
         # pgn files in the data folder
@@ -31,19 +31,19 @@ class ChessDataset(Dataset):
                 for move in game.mainline_moves():
                     board.push(move)
                     ser = State(board).serialize()
-                    X.append(ser)
-                    Y.append(value)
-                if max_samples is not None and len(X) > max_samples:
+                    self.X.append(ser)
+                    self.Y.append(value)
+                if max_samples is not None and len(self.X) > max_samples:
                     break
                 games_counter += 1
                 if games_counter % 50 == 0:
-                    print(f"\r{len(X)} samples from {games_counter} games", end="")
-        self.X = torch.stack(X)
-        self.Y = torch.Tensor(Y)
-        print("loaded", self.X.shape, self.Y.shape)
+                    print(f"\r{len(self.X)} samples from {games_counter} games", end="")
+        print("loaded", len(self.X))
 
     def __len__(self):
-        return self.X.shape[0]
+        return len(self.X)
 
     def __getitem__(self, idx):
-        return (self.X[idx], self.Y[idx])
+        x_tensor = serialization_to_tensor(self.X[idx])
+        y_tensor = torch.tensor(self.Y[idx]).unsqueeze(-1).float()
+        return (x_tensor, y_tensor)

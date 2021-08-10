@@ -1,5 +1,5 @@
 import torch.nn as nn
-import torch.nn.functional as F
+import torch
 
 
 class SkipBlock(nn.Module):
@@ -35,4 +35,4 @@ class ChessValueModel(nn.Module):
         x = self.in_layer(x)
         x = self.blocks(x)
         x = self.out_layer(x)
-        return F.tanh(x)
+        return torch.tanh(x)
