@@ -8,6 +8,7 @@ import torch
 from .State import State, serialization_to_tensor
 
 DATA_DIR = (Path(__file__) / ".." / ".." / "data").resolve()
+MIN_ELO = 2000
 
 
 class ChessDataset(Dataset):
@@ -23,6 +24,11 @@ class ChessDataset(Dataset):
                 game = read_game(pgn)
                 if game is None:
                     break
+                if (
+                    int(game.headers["BlackElo"]) < MIN_ELO
+                    or int(game.headers["WhiteElo"]) < MIN_ELO
+                ):
+                    continue
                 res = game.headers["Result"]
                 if res not in values:
                     continue
