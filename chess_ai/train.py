@@ -33,7 +33,6 @@ def train(
             unit="img",
         ) as pbar:
             for (data, target) in train_loader:
-                target = target.unsqueeze(-1)
                 data, target = data.to(device), target.to(device)
 
                 optimizer.zero_grad()
