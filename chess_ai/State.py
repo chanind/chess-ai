@@ -79,6 +79,18 @@ def func_compare(val1, val2) -> int:
     return 1 if val1 > val2 else -1
 
 
+def action_tensor_to_chess_move(board: chess.Board, action: torch.Tensor) -> chess.Move:
+    best_move = None
+    best_move_score = -np.Inf
+    for move in board.legal_moves:
+        move_coords = process_move_coords(move)
+        move_score = action[move_coords].item()
+        if best_move_score < move_score:
+            best_move = move
+            best_move_score = move_score
+    return best_move
+
+
 def process_move_coords(move) -> Tuple[int, int, int]:
     """
     given a move, output the x, y, and move_type for the move
