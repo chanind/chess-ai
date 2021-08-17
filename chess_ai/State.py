@@ -91,13 +91,15 @@ def action_tensor_to_chess_move(board: chess.Board, action: torch.Tensor) -> che
     return best_move
 
 
-def process_move_coords(move) -> Tuple[int, int, int]:
+def process_move_coords(
+    move: chess.Move, is_white: bool = True
+) -> Tuple[int, int, int]:
     """
     given a move, output the x, y, and move_type for the move
     This represents the coordinate of the output that will be 1, the rest will be 0
     """
-    x_coord, y_coord = get_coords(move.from_square)
-    to_coords = get_coords(move.to_square)
+    x_coord, y_coord = get_coords(transform_board_index(move.from_square, is_white))
+    to_coords = get_coords(transform_board_index(move.to_square, is_white))
 
     key_x = func_compare(to_coords[0], x_coord)
     key_y = func_compare(to_coords[1], y_coord)
@@ -116,24 +118,30 @@ def process_move_coords(move) -> Tuple[int, int, int]:
         underpromotion_value = UNDERPROMOTION_TYPE_MAPPING[move.promotion]
         underpromotion_direction = UNDERPROMOTION_DIRECTIONAL_MAPPING[direction_key]
         return (
+            underpromotion_direction + (underpromotion_value * 3) + 64,
             x_coord,
             y_coord,
-            underpromotion_direction + (underpromotion_value * 3) + 64,
         )
 
     elif is_knight_move:
         # knight moves are 56-63
         direction_key = (delta_x, delta_y)
-        return (x_coord, y_coord, KNIGHT_DIRECTIONAL_MAPPING[direction_key] + 56)
+        return (KNIGHT_DIRECTIONAL_MAPPING[direction_key] + 56, x_coord, y_coord)
     else:
         # queen moves are 0-55
         direction_key = (key_x, key_y)
         magnitude = max(abs(delta_x), abs(delta_y))
         return (
+            QUEEN_DIRECTIONAL_MAPPING[direction_key] + (magnitude - 1) * 8,
             x_coord,
             y_coord,
-            QUEEN_DIRECTIONAL_MAPPING[direction_key] + (magnitude - 1) * 8,
         )
+
+
+def transform_board_index(index: int, is_white: bool):
+    if is_white:
+        return index
+    return 63 - index
 
 
 class State(object):
@@ -151,40 +159,64 @@ class State(object):
             self.board.ep_square,
         )
 
+    PIECES_MAP_WHITE = {
+        "P": 1,
+        "N": 2,
+        "B": 3,
+        "R": 4,
+        "Q": 5,
+        "K": 6,
+        "p": 7,
+        "n": 8,
+        "b": 9,
+        "r": 10,
+        "q": 11,
+        "k": 12,
+    }
+    # # if it's black's turn, invert the board and piece locations
+    PIECES_MAP_BLACK = {
+        "p": 1,
+        "n": 2,
+        "b": 3,
+        "r": 4,
+        "q": 5,
+        "k": 6,
+        "P": 7,
+        "N": 8,
+        "B": 9,
+        "R": 10,
+        "Q": 11,
+        "K": 12,
+    }
+
     def serialize(self) -> Tuple[np.array, np.array, Optional[int], int]:
         assert self.board.is_valid()
 
         pieces_state_linear = np.zeros(64, np.uint8)
+        is_white = self.board.turn == chess.WHITE
         for i in range(64):
+            pos = transform_board_index(i, is_white)
             pp = self.board.piece_at(i)
             if pp is not None:
-                pieces_state_linear[i] = {
-                    "P": 1,
-                    "N": 2,
-                    "B": 3,
-                    "R": 4,
-                    "Q": 5,
-                    "K": 6,
-                    "p": 7,
-                    "n": 8,
-                    "b": 9,
-                    "r": 10,
-                    "q": 11,
-                    "k": 12,
-                }[pp.symbol()]
+                pieces_map = (
+                    self.PIECES_MAP_WHITE if is_white else self.PIECES_MAP_BLACK
+                )
+                pieces_state_linear[pos] = pieces_map[pp.symbol()]
         pieces_state = pieces_state_linear.reshape((8, 8))
 
         castling_state = np.zeros(4, np.uint8)
-        if self.board.has_queenside_castling_rights(chess.WHITE):
+        if self.board.has_queenside_castling_rights(self.board.turn):
             castling_state[0] = 1
-        if self.board.has_kingside_castling_rights(chess.WHITE):
+        if self.board.has_kingside_castling_rights(self.board.turn):
             castling_state[1] = 1
-        if self.board.has_queenside_castling_rights(chess.BLACK):
+        if self.board.has_queenside_castling_rights(not self.board.turn):
             castling_state[2] = 1
-        if self.board.has_kingside_castling_rights(chess.BLACK):
+        if self.board.has_kingside_castling_rights(not self.board.turn):
             castling_state[3] = 1
 
-        en_passant_state = self.board.ep_square
+        en_passant_state = None
+        if self.board.ep_square is not None:
+            en_passant_state = transform_board_index(self.board.ep_square, is_white)
 
         turn = self.board.turn
         move_number = min(len(self.board.move_stack) / 250.0, 1)

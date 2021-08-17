@@ -2,14 +2,19 @@ import torch
 import torch.nn as nn
 from torch import optim
 from tqdm import tqdm
+import chess
 
-from .ChessValueModel import ChessValueModel
+from .State import process_move_coords
+from .ChessModel import ChessModel
 from .ChessDataset import ChessDataset
+
+
+criterion = nn.CrossEntropyLoss()
 
 
 def train(
     device: torch.device,
-    model: ChessValueModel,
+    model: ChessModel,
     epochs: int = 100,
     batch_size: int = 256,
     max_samples=None,
@@ -19,7 +24,6 @@ def train(
         chess_dataset, batch_size=batch_size, shuffle=True
     )
     optimizer = optim.Adam(model.parameters())
-    floss = nn.MSELoss()
 
     model.to(device)
     model.train()
@@ -33,11 +37,15 @@ def train(
             unit="img",
         ) as pbar:
             for (data, target) in train_loader:
-                data, target = data.to(device), target.to(device)
-
+                batch_size = data.shape[0]
                 optimizer.zero_grad()
-                output = model(data)
-                loss = floss(output, target)
+                output = model(data.to(device))
+                loss = criterion(
+                    output.view((batch_size, -1)),
+                    # this is hacky, the target shouldn't be one-hot, so this is undoing the one hot encoding
+                    # we should just directly output the one-hot pos in the dataloader rather than doing this
+                    target.to(device).view((batch_size, -1)).max(dim=1)[1],
+                )
                 loss.backward()
                 optimizer.step()
 
@@ -53,6 +61,6 @@ def train(
 
 if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = ChessValueModel()
+    model = ChessModel()
     train(device, model, max_samples=1000)
     torch.save(model.state_dict(), "chess_value_model.pth")
