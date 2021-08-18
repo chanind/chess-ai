@@ -83,7 +83,7 @@ def action_tensor_to_chess_move(board: chess.Board, action: torch.Tensor) -> che
     best_move = None
     best_move_score = -np.Inf
     for move in board.legal_moves:
-        move_coords = process_move_coords(move)
+        move_coords = process_move_coords(move, board.turn)
         move_score = action[move_coords].item()
         if best_move_score < move_score:
             best_move = move

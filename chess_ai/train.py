@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from torch import optim
 from tqdm import tqdm
-import chess
 
 from .State import process_move_coords
 from .ChessModel import ChessModel
