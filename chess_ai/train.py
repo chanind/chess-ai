@@ -19,8 +19,9 @@ def train(
     batch_size: int = 256,
     max_samples=None,
     evaluate_after_batch=True,
+    min_elo=2300,
 ):
-    chess_dataset = ChessDataset(max_samples)
+    chess_dataset = ChessDataset(max_samples, min_elo=min_elo)
     train_loader = torch.utils.data.DataLoader(
         chess_dataset, batch_size=batch_size, shuffle=True
     )

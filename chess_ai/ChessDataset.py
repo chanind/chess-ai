@@ -8,11 +8,11 @@ import torch
 from .State import State, process_move_coords, serialization_to_tensor
 
 DATA_DIR = (Path(__file__) / ".." / ".." / "data").resolve()
-MIN_ELO = 2500
+MIN_ELO = 2300
 
 
 class ChessDataset(Dataset):
-    def __init__(self, max_samples=None):
+    def __init__(self, max_samples=None, min_elo=MIN_ELO):
         self.X = []
         self.Y = []
         games_counter = 0
@@ -24,8 +24,8 @@ class ChessDataset(Dataset):
                 if game is None:
                     break
                 if (
-                    int(game.headers["BlackElo"]) < MIN_ELO
-                    or int(game.headers["WhiteElo"]) < MIN_ELO
+                    int(game.headers["BlackElo"]) < min_elo
+                    or int(game.headers["WhiteElo"]) < min_elo
                 ):
                     continue
                 board = game.board()
