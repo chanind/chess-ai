@@ -133,3 +133,9 @@ dmypy.json
 
 # data
 data
+
+# models
+*.pth
+
+# misc
+.DS_Store
