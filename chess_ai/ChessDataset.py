@@ -38,8 +38,12 @@ class ChessDataset(Dataset):
                     break
                 games_counter += 1
                 if games_counter % 50 == 0:
-                    print(f"\r{len(self.X)} samples from {games_counter} games", end="")
-        print("loaded", len(self.X))
+                    print(
+                        f"\r{len(self.X)} samples from {games_counter} games",
+                        end="",
+                        flush=True,
+                    )
+        print("loaded", len(self.X), flush=True)
 
     def __len__(self):
         return len(self.X)
