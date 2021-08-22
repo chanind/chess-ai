@@ -1,3 +1,4 @@
+from chess_ai.estimate_model_level import estimate_model_level
 import torch
 import torch.nn as nn
 from torch import optim
@@ -17,6 +18,7 @@ def train(
     epochs: int = 100,
     batch_size: int = 256,
     max_samples=None,
+    evaluate_after_batch=True,
 ):
     chess_dataset = ChessDataset(max_samples)
     train_loader = torch.utils.data.DataLoader(
@@ -25,7 +27,6 @@ def train(
     optimizer = optim.Adam(model.parameters())
 
     model.to(device)
-    model.train()
 
     for epoch in range(epochs):
         all_loss = 0
@@ -35,6 +36,7 @@ def train(
             desc=f"Epoch {epoch + 1}",
             unit="img",
         ) as pbar:
+            model.train()
             for (data, target) in train_loader:
                 batch_size = data.shape[0]
                 optimizer.zero_grad()
@@ -56,6 +58,11 @@ def train(
                         "loss": all_loss / num_loss,
                     }
                 )
+
+            if evaluate_after_batch:
+                model.eval()
+                model_score = estimate_model_level(model, device)
+                print(f"model score: {model_score}")
 
 
 if __name__ == "__main__":

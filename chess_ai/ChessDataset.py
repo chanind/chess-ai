@@ -8,7 +8,7 @@ import torch
 from .State import State, process_move_coords, serialization_to_tensor
 
 DATA_DIR = (Path(__file__) / ".." / ".." / "data").resolve()
-MIN_ELO = 2000
+MIN_ELO = 2500
 
 
 class ChessDataset(Dataset):

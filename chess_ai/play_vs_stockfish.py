@@ -12,7 +12,7 @@ def play_vs_stockfish(
     device: torch.device,
     color: bool = chess.WHITE,
     stockfish_kill_level: int = 5,
-    stockfish_move_timeout: float = 0.1,
+    stockfish_move_timeout: float = 0.01,
 ):
     engine = chess.engine.SimpleEngine.popen_uci("stockfish")
     engine.configure({"Skill Level": stockfish_kill_level})
@@ -28,11 +28,9 @@ def play_vs_stockfish(
             )
             result = model(input)
             move = action_tensor_to_chess_move(board, result[0])
-            print(f"MODEL MOVE: {move}")
         else:
             result = engine.play(board, chess.engine.Limit(time=stockfish_move_timeout))
             move = result.move
-            print(f"STOCKFISH MOVE: {move}")
         board.push(move)
 
     engine.quit()
