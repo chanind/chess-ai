@@ -19,6 +19,7 @@ def train(
     batch_size: int = 256,
     max_samples=None,
     evaluate_after_batch=True,
+    stockfish_binary=None,
     min_elo=2300,
 ):
     chess_dataset = ChessDataset(max_samples, min_elo=min_elo)
@@ -62,7 +63,9 @@ def train(
 
             if evaluate_after_batch:
                 model.eval()
-                model_score = estimate_model_level(model, device)
+                model_score = estimate_model_level(
+                    model, device, stockfish_binary=stockfish_binary
+                )
                 print(f"model score: {model_score}")
 
 
