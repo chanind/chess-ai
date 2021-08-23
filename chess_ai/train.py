@@ -92,6 +92,7 @@ def train(
                         )
 
                         validation_loss += loss.item()
+                        num_validation_batches += 1
 
                         pbar.set_postfix(
                             **{
