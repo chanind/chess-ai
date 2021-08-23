@@ -131,8 +131,9 @@ dmypy.json
 # vscode
 .vscode
 
-# data
+# downloaded data
 data
+!chess_ai/data
 
 # models
 *.pth
