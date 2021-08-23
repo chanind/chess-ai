@@ -3,9 +3,9 @@ import chess
 import chess.engine
 import argparse
 
-from .InputState import InputState
+from .translation.InputState import InputState
 from .ChessModel import ChessModel
-from .model_output_to_chess_move import model_output_to_chess_move
+from .translation.model_output_to_chess_move import model_output_to_chess_move
 
 
 def play_vs_stockfish(
