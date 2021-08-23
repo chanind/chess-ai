@@ -44,7 +44,6 @@ def train(
         with tqdm(
             total=len(train_dataset),
             desc=f"Epoch {epoch + 1}",
-            unit="img",
         ) as pbar:
             model.train()
             for (inputs, target) in train_loader:
