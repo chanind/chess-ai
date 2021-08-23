@@ -3,8 +3,9 @@ import chess
 import chess.engine
 import argparse
 
-from .State import State, action_tensor_to_chess_move, serialization_to_tensor
+from .translation.InputState import InputState
 from .ChessModel import ChessModel
+from .translation.model_output_to_chess_move import model_output_to_chess_move
 
 
 def play_vs_stockfish(
@@ -22,13 +23,9 @@ def play_vs_stockfish(
 
     while not board.is_game_over():
         if board.turn == color:
-            input = (
-                serialization_to_tensor(State(board).serialize())
-                .unsqueeze(0)
-                .to(device)
-            )
+            input = InputState(board).to_tensor().unsqueeze(0).to(device)
             result = model(input)
-            move = action_tensor_to_chess_move(board, result[0])
+            move = model_output_to_chess_move(board, result[0])
         else:
             result = engine.play(board, chess.engine.Limit(time=stockfish_move_timeout))
             move = result.move

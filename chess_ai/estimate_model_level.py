@@ -1,8 +1,8 @@
-from chess_ai.play_vs_stockfish import play_vs_stockfish
 import torch
 import chess
 import chess.engine
 
+from .play_vs_stockfish import play_vs_stockfish
 from .ChessModel import ChessModel
 
 

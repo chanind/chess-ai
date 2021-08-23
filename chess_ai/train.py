@@ -1,12 +1,12 @@
-from chess_ai.estimate_model_level import estimate_model_level
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 from torch import optim
 from tqdm import tqdm
 
-from .State import process_move_coords
 from .ChessModel import ChessModel
-from .ChessDataset import ChessDataset
+from .data.ChessDataset import ChessDataset
+from .estimate_model_level import estimate_model_level
 
 
 criterion = nn.CrossEntropyLoss()
@@ -15,34 +15,42 @@ criterion = nn.CrossEntropyLoss()
 def train(
     device: torch.device,
     model: ChessModel,
+    train_dataset: ChessDataset,
+    validation_dataset: ChessDataset = None,
     epochs: int = 100,
     batch_size: int = 256,
-    max_samples=None,
     evaluate_after_batch=True,
     stockfish_binary=None,
-    min_elo=2300,
+    num_workers: int = 2,
 ):
-    chess_dataset = ChessDataset(max_samples, min_elo=min_elo)
-    train_loader = torch.utils.data.DataLoader(
-        chess_dataset, batch_size=batch_size, shuffle=True
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
     )
+    validation_loader = None
+    if validation_dataset:
+        validation_loader = DataLoader(
+            validation_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+        )
     optimizer = optim.Adam(model.parameters())
 
     model.to(device)
 
     for epoch in range(epochs):
-        all_loss = 0
-        num_loss = 0
+        train_loss = 0
+        num_train_batches = 0
         with tqdm(
-            total=len(chess_dataset),
+            total=len(train_dataset),
             desc=f"Epoch {epoch + 1}",
             unit="img",
         ) as pbar:
             model.train()
-            for (data, target) in train_loader:
-                batch_size = data.shape[0]
+            for (inputs, target) in train_loader:
+                batch_size = inputs.shape[0]
                 optimizer.zero_grad()
-                output = model(data.to(device))
+                output = model(inputs.to(device))
                 loss = criterion(
                     output.view((batch_size, -1)),
                     # this is hacky, the target shouldn't be one-hot, so this is undoing the one hot encoding
@@ -52,12 +60,12 @@ def train(
                 loss.backward()
                 optimizer.step()
 
-                all_loss += loss.item()
-                num_loss += 1
-                pbar.update(data.shape[0])
+                train_loss += loss.item()
+                num_train_batches += 1
+                pbar.update(inputs.shape[0])
                 pbar.set_postfix(
                     **{
-                        "loss": all_loss / num_loss,
+                        "loss": train_loss / num_train_batches,
                     }
                 )
 
@@ -67,6 +75,30 @@ def train(
                     model, device, stockfish_binary=stockfish_binary
                 )
                 print(f"model score: {model_score}")
+
+            if validation_loader:
+                model.eval()
+                validation_loss = 0
+                num_validation_batches = 0
+                with torch.no_grad():
+                    for (inputs, target) in validation_loader:
+                        output = model(inputs.to(device))
+                        loss = criterion(
+                            output.view((batch_size, -1)),
+                            # this is hacky, the target shouldn't be one-hot, so this is undoing the one hot encoding
+                            # we should just directly output the one-hot pos in the dataloader rather than doing this
+                            target.to(device).view((batch_size, -1)).max(dim=1)[1],
+                        )
+
+                        validation_loss += loss.item()
+
+                        pbar.set_postfix(
+                            **{
+                                "Validation Loss": validation_loss
+                                / num_validation_batches,
+                            }
+                        )
+                        pbar.update(inputs.shape[0])
 
 
 if __name__ == "__main__":
