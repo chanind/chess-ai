@@ -1,11 +1,7 @@
 from chess_ai.data.TrainingSample import TrainingSample
 from typing import Sequence
-import numpy as np
 from torch.utils.data import Dataset
-import os
-from chess.pgn import read_game
 from pathlib import Path
-import torch
 
 
 DATA_DIR = (Path(__file__) / ".." / ".." / "data").resolve()

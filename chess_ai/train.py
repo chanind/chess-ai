@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 from torch import optim
 from tqdm import tqdm
 
@@ -20,14 +21,18 @@ def train(
     batch_size: int = 256,
     evaluate_after_batch=True,
     stockfish_binary=None,
+    num_workers: int = 2,
 ):
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
     )
     validation_loader = None
     if validation_dataset:
-        validation_loader = torch.utils.data.DataLoader(
-            validation_dataset, batch_size=batch_size, shuffle=False
+        validation_loader = DataLoader(
+            validation_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
         )
     optimizer = optim.Adam(model.parameters())
 
