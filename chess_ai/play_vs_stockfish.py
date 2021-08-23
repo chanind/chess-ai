@@ -14,8 +14,9 @@ def play_vs_stockfish(
     color: bool = chess.WHITE,
     stockfish_kill_level: int = 5,
     stockfish_move_timeout: float = 0.01,
+    stockfish_binary=None,
 ):
-    engine = chess.engine.SimpleEngine.popen_uci("stockfish")
+    engine = chess.engine.SimpleEngine.popen_uci(stockfish_binary or "stockfish")
     engine.configure({"Skill Level": stockfish_kill_level})
 
     board = chess.Board()
@@ -39,6 +40,7 @@ if __name__ == "__main__":
     parser.add_argument("--model-file")
     parser.add_argument("--skill-level", type=int)
     parser.add_argument("--as-black", action="store_true")
+    parser.add_argument("--stockfish-binary", default=None)
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -52,7 +54,13 @@ if __name__ == "__main__":
     color = chess.BLACK if args.as_black else chess.WHITE
     print(f"playing stockfish level {args.skill_level}")
 
-    res = play_vs_stockfish(model, device, color, stockfish_kill_level=args.skill_level)
+    res = play_vs_stockfish(
+        model,
+        device,
+        color,
+        stockfish_kill_level=args.skill_level,
+        stockfish_binary=args.stockfish_binary,
+    )
 
     print("Done!")
     outcome = res.outcome()

@@ -19,6 +19,7 @@ def train(
     epochs: int = 100,
     batch_size: int = 256,
     evaluate_after_batch=True,
+    stockfish_binary=None,
 ):
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True
@@ -65,7 +66,9 @@ def train(
 
             if evaluate_after_batch:
                 model.eval()
-                model_score = estimate_model_level(model, device)
+                model_score = estimate_model_level(
+                    model, device, stockfish_binary=stockfish_binary
+                )
                 print(f"model score: {model_score}")
 
             if validation_loader:
