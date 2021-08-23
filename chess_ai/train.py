@@ -82,6 +82,7 @@ def train(
                 num_validation_batches = 0
                 with torch.no_grad():
                     for (inputs, target) in validation_loader:
+                        batch_size = inputs.shape[0]
                         output = model(inputs.to(device))
                         loss = criterion(
                             output.view((batch_size, -1)),
