@@ -9,13 +9,13 @@ MIN_ELO = 2300
 
 
 class ChessDataset(Dataset):
-    training_samples: Sequence[TrainingSample]
+    samples: Sequence[TrainingSample]
 
-    def __init__(self, training_samples: Sequence[TrainingSample]):
-        self.training_samples = training_samples
+    def __init__(self, samples: Sequence[TrainingSample]):
+        self.samples = samples
 
     def __len__(self):
-        return len(self.training_samples)
+        return len(self.samples)
 
     def __getitem__(self, idx):
         sample = self.samples[idx]
