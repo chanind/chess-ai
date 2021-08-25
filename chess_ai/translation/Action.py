@@ -6,6 +6,9 @@ import numpy as np
 from .utils import get_coords, transform_board_index
 
 
+ACTION_CHANNELS = 73
+
+
 QUEEN_DIRECTIONAL_MAPPING = {
     (-1, 0): 0,
     (-1, -1): 1,
@@ -60,6 +63,7 @@ def model_output_to_chess_move(board: chess.Board, action: torch.Tensor) -> ches
 
 class Action:
     coords: Tuple[int, int, int]
+    move: chess.Move
 
     def __init__(self, move: chess.Move, turn: chess.Color):
         is_white = turn == chess.WHITE
@@ -97,9 +101,10 @@ class Action:
             action_type = QUEEN_DIRECTIONAL_MAPPING[direction_key] + (magnitude - 1) * 8
 
         self.coords = (action_type, x_coord, y_coord)
+        self.move = move
 
     def to_tensor(self) -> torch.Tensor:
         with torch.no_grad():
-            action_tensor = torch.zeros(73, 8, 8)
+            action_tensor = torch.zeros(ACTION_CHANNELS, 8, 8)
             action_tensor[self.coords] = 1.0
         return action_tensor

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.modules.batchnorm import BatchNorm1d
 
 # loosely based on https://github.com/kuangliu/pytorch-cifar
 
@@ -47,11 +48,21 @@ class ChessModel(nn.Module):
         self.res_blocks = nn.Sequential(
             *[BasicBlock(hidden_channels, hidden_channels) for _ in range(num_blocks)]
         )
-        self.out_block = nn.Conv2d(
+        self.policy_out = nn.Conv2d(
             hidden_channels, out_channels, kernel_size=3, stride=1, padding=1
+        )
+        self.value_out = nn.Sequential(
+            nn.Linear(8 * 8 * hidden_channels, hidden_channels),
+            nn.BatchNorm1d(hidden_channels),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.2),
+            nn.Linear(hidden_channels, 1),
+            nn.Tanh(),
         )
 
     def forward(self, x):
         res_in = self.in_block(x)
         res_out = self.res_blocks(res_in)
-        return self.out_block(res_out)
+        policy = self.policy_out(res_out)
+        value = self.value_out(res_out.view(res_out.shape[0], -1))
+        return (policy, value)
