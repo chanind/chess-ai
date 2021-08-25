@@ -56,7 +56,7 @@ def train_self_play(
         if i%85==0:
             torch.save(model.state_dict(), "rchess.pth")
             play_against_others(AlphaChessSP(model, device), stockfish=stockfish)
-        r, game_loss = train_one_game(model, adversary, color = i%2)
+        r, game_loss = train_one_game(model, adversary, color = i%2, device = device)
         loss.append(game_loss)
         print("Iteration no {}, r = {}, loss = {}, t = {}".format(i, r, game_loss, time.time() - t0))
         if i%train_interval == 0:
