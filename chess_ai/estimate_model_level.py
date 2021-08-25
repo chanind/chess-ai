@@ -1,10 +1,63 @@
 import torch
 import chess
 import chess.engine
+import collections
 
 from .play_vs_stockfish import play_vs_stockfish
 from .ChessModel import ChessModel
+from .chess_players import ChessPlayer, MinmaxPlayer, StockfishPlayer, AlphaChess
 
+def one_game(player1: ChessPlayer, player2: ChessPlayer) -> int:
+    board = chess.Board()
+    while not board.is_game_over():
+        if board.turn:
+            move = player1.make_move(board)
+        else:
+            move = player2.make_move(board)
+        board.push(move)
+    outcome = board.outcome()      
+    if outcome.winner is None:
+        return 0
+    else:
+        return 1 if outcome.winner == chess.WHITE else -1
+
+def play_against_others(player: ChessPlayer):
+
+    adversaries = [
+        (MinmaxPlayer(1), 1),
+        (MinmaxPlayer(2), 1),
+        (MinmaxPlayer(3), 1),
+        (MinmaxPlayer(4), 1),
+        (StockfishPlayer("stockfish", 0), 5),
+        (StockfishPlayer("stockfish", 1), 5),
+        (StockfishPlayer("stockfish", 2), 5),
+        (StockfishPlayer("stockfish", 3), 5),
+    ]
+
+    for adversary, n in adversaries:
+        result_map = {
+        chess.WHITE: {1: "wins", 0: "stales", -1: "defeats"},
+        chess.BLACK: {-1: "wins", 0: "stales", 1: "defeats"}
+        }
+        for color in [chess.WHITE, chess.BLACK]:
+            results = collections.defaultdict(int)
+            for i in range(n):
+                if color:
+                    r = one_game(player, adversary)
+                else:
+                    r = one_game(adversary, player)
+                results[result_map[color][r]] += 1
+            print("Played {} times with color {} against {}, for a total of:".format(
+                n, "white" if color else "black", adversary
+            ))
+            for k, v in results.items():
+                print("{} {}, ".format(v, k), end = " ")
+            print("")
+            print("+++++++++++++++++++++++++++++++++++++++++++")
+        adversary.quit()
+    
+                
+            
 
 def estimate_model_level(
     model: ChessModel,
@@ -41,3 +94,14 @@ def estimate_model_level(
         [(level + 1) * avg_score for level, avg_score in enumerate(score_per_level)]
     )
     return total_score
+
+
+if __name__ == "__main__":
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = ChessModel()
+    model.load_state_dict(
+        torch.load("chess.pth", map_location=torch.device(device))
+    )
+    player = AlphaChess(model, device)
+    play_against_others(player)
