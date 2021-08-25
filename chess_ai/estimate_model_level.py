@@ -100,5 +100,6 @@ if __name__ == "__main__":
     model.load_state_dict(
         torch.load("chess.pth", map_location=torch.device(device))
     )
+    model = model.to(device)
     player = AlphaChessSP(model, device)
     play_against_others(player)
