@@ -55,3 +55,25 @@ class ChessModel(nn.Module):
         res_in = self.in_block(x)
         res_out = self.res_blocks(res_in)
         return self.out_block(res_out)
+
+class ValueNetwork(nn.Module):
+    
+    def __init__(self, num_blocks = 12, hidden_channels=128, in_channels=20):
+        super().__init__()
+        self.in_block = BasicBlock(in_channels, hidden_channels)
+        self.res_blocks = nn.Sequential(
+            *[BasicBlock(hidden_channels, hidden_channels) for _ in range(num_blocks)]
+        )
+        self.out_block = nn.Sequential(
+            nn.Conv2d(hidden_channels, 1, 3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.2),
+            nn.Linear(8*8, 1),
+            nn.Tanh(),
+        )
+
+    def forward(self, x):
+        x = self.in_block(x)
+        x = self.res_blocks(x)
+        x = self.out_block(x)
+        return x

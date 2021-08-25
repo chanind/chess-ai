@@ -2,10 +2,11 @@ import chess
 import torch
 import torch.nn as nn
 
+
 from .translation.InputState import InputState
 from .ChessModel import ChessModel
-from .translation.model_output_to_chess_move import model_output_to_chess_move
-
+from .translation.model_output_to_chess_move import model_output_to_chess_move, model_output_to_move_distribution
+from torch.distributions import Categorical
 
 class ChessPlayer:
 
@@ -38,7 +39,7 @@ class StockfishPlayer(ChessPlayer):
         self.engine.quit()
 
     def __str__(self):
-        return "Stockfish Player Level {}".format(self.kill_level)
+        return "Stockfish Player Level {}, with timeout = {}".format(self.kill_level, self.move_timeout)
 
 
 class MinmaxPlayer(ChessPlayer):
@@ -116,5 +117,19 @@ class AlphaChess(ChessPlayer):
         input = InputState(board).to_tensor().unsqueeze(0).to(self.device)
         with torch.no_grad():
             result = self.chess_model(input)
-        move = model_output_to_chess_move(board, result[0])
+        move, _ = model_output_to_chess_move(board, result[0])
         return move
+
+class AlphaChessSP(ChessPlayer):
+    def __init__(self, chess_model: ChessModel, device):
+        self.chess_model = chess_model
+        self.chess_model.eval()
+        self.device = device
+    
+    def make_move(self, board: chess.Board)->chess.Move:
+        input = InputState(board).to_tensor().unsqueeze(0).to(self.device)
+        with torch.no_grad():
+            result = self.chess_model(input)
+        scores, moves = model_output_to_move_distribution(board, result[0])
+        m = Categorical(logits=scores)
+        return moves[m.sample()]

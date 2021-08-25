@@ -5,7 +5,8 @@ import collections
 
 from .play_vs_stockfish import play_vs_stockfish
 from .ChessModel import ChessModel
-from .chess_players import ChessPlayer, MinmaxPlayer, StockfishPlayer, AlphaChess
+from .chess_players import ChessPlayer, MinmaxPlayer, StockfishPlayer, AlphaChess, AlphaChessSP
+from torch.distributions import Categorical
 
 def one_game(player1: ChessPlayer, player2: ChessPlayer) -> int:
     board = chess.Board()
@@ -24,20 +25,17 @@ def one_game(player1: ChessPlayer, player2: ChessPlayer) -> int:
 def play_against_others(player: ChessPlayer):
 
     adversaries = [
-        (MinmaxPlayer(1), 1),
-        (MinmaxPlayer(2), 1),
-        (MinmaxPlayer(3), 1),
-        (MinmaxPlayer(4), 1),
-        (StockfishPlayer("stockfish", 0), 5),
-        (StockfishPlayer("stockfish", 1), 5),
-        (StockfishPlayer("stockfish", 2), 5),
-        (StockfishPlayer("stockfish", 3), 5),
+
+        (StockfishPlayer("stockfish", 0, move_timeout = 0.05), 5),
+        (StockfishPlayer("stockfish", 1, move_timeout = 0.05), 5),
+        (StockfishPlayer("stockfish", 2, move_timeout = 0.05), 5),
+        (StockfishPlayer("stockfish", 3, move_timeout = 0.05), 5),
     ]
 
     for adversary, n in adversaries:
         result_map = {
-        chess.WHITE: {1: "wins", 0: "stales", -1: "defeats"},
-        chess.BLACK: {-1: "wins", 0: "stales", 1: "defeats"}
+            chess.WHITE: {1: "wins", 0: "stales", -1: "defeats"},
+            chess.BLACK: {-1: "wins", 0: "stales", 1: "defeats"}
         }
         for color in [chess.WHITE, chess.BLACK]:
             results = collections.defaultdict(int)
@@ -97,11 +95,10 @@ def estimate_model_level(
 
 
 if __name__ == "__main__":
-
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = ChessModel()
     model.load_state_dict(
         torch.load("chess.pth", map_location=torch.device(device))
     )
-    player = AlphaChess(model, device)
+    player = AlphaChessSP(model, device)
     play_against_others(player)
