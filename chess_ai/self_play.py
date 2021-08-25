@@ -50,6 +50,7 @@ def train_self_play(
         if i%change_adversary_interval == 0:
             new_model = ChessModel()
             new_model.load_state_dict(model.state_dict())
+            new_model = new_model.to(device)
             adversary_pool.append(AlphaChessSP(new_model, device))
             adversary = random.sample(adversary_pool, 1)[0]
         if i%85==0:
