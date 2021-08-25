@@ -22,14 +22,14 @@ def one_game(player1: ChessPlayer, player2: ChessPlayer) -> int:
     else:
         return 1 if outcome.winner == chess.WHITE else -1
 
-def play_against_others(player: ChessPlayer):
+def play_against_others(player: ChessPlayer, stockfish: str = "stockfish"):
 
     adversaries = [
 
-        (StockfishPlayer("stockfish", 0, move_timeout = 0.05), 5),
-        (StockfishPlayer("stockfish", 1, move_timeout = 0.05), 5),
-        (StockfishPlayer("stockfish", 2, move_timeout = 0.05), 5),
-        (StockfishPlayer("stockfish", 3, move_timeout = 0.05), 5),
+        (StockfishPlayer(stockfish, 0, move_timeout = 0.05), 5),
+        (StockfishPlayer(stockfish, 1, move_timeout = 0.05), 5),
+        (StockfishPlayer(stockfish, 2, move_timeout = 0.05), 5),
+        (StockfishPlayer(stockfish, 3, move_timeout = 0.05), 5),
     ]
 
     for adversary, n in adversaries:
