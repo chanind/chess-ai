@@ -30,7 +30,7 @@ def train_one_game(model: ChessModel, adversary: ChessPlayer, color = chess.WHIT
     outcome = board.outcome()
     r = 0     
     if outcome.winner is not None:
-        r = 1 if outcome.winner == chess.WHITE else -1
+        r = 1 if outcome.winner == color else -1
     return r, loss*r
 
 def train_self_play(

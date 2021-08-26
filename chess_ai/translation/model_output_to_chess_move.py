@@ -24,13 +24,13 @@ def model_output_to_chess_move(
     return best_move, best_move_coords
 
 def model_output_to_move_distribution(
-    board: chess.Board, action_probabilites: torch.Tensor):
+    board: chess.Board, action_probabilites: torch.Tensor, T: int = 1):
 
     moves = [move for move in board.legal_moves]
     scores = torch.zeros(len(moves))
     for i, move in enumerate(moves):
         move_coords = Action(move, board.turn).coords
-        scores[i] = action_probabilites[move_coords]
+        scores[i] = T*action_probabilites[move_coords]
     return scores, moves
 
 

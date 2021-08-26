@@ -24,12 +24,17 @@ def one_game(player1: ChessPlayer, player2: ChessPlayer) -> int:
 
 def play_against_others(player: ChessPlayer, stockfish: str = "stockfish"):
 
+    device = "cpu"
+    model = ChessModel()
+    model.load_state_dict(
+        torch.load("chess.pth", map_location=torch.device(device))
+    )
+    model = model.to(device)
     adversaries = [
 
-        (StockfishPlayer(stockfish, 0, move_timeout = 0.05), 5),
-        (StockfishPlayer(stockfish, 1, move_timeout = 0.05), 5),
-        (StockfishPlayer(stockfish, 2, move_timeout = 0.05), 5),
-        (StockfishPlayer(stockfish, 3, move_timeout = 0.05), 5),
+        (StockfishPlayer(stockfish, 0, move_timeout = 0.02), 5),
+        (StockfishPlayer(stockfish, 1, move_timeout = 0.02), 5),
+        (AlphaChessSP(model, device, T = 0.1), 1)
     ]
 
     for adversary, n in adversaries:
@@ -101,5 +106,5 @@ if __name__ == "__main__":
         torch.load("chess.pth", map_location=torch.device(device))
     )
     model = model.to(device)
-    player = AlphaChessSP(model, device)
+    player = AlphaChessSP(model, device, T=0.1)
     play_against_others(player)

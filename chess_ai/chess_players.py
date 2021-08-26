@@ -121,7 +121,8 @@ class AlphaChess(ChessPlayer):
         return move
 
 class AlphaChessSP(ChessPlayer):
-    def __init__(self, chess_model: ChessModel, device):
+    def __init__(self, chess_model: ChessModel, device: str, T:int = 1):
+        self.T = T
         self.chess_model = chess_model
         self.chess_model.eval()
         self.device = device
@@ -130,6 +131,6 @@ class AlphaChessSP(ChessPlayer):
         input = InputState(board).to_tensor().unsqueeze(0).to(self.device)
         with torch.no_grad():
             result = self.chess_model(input)
-        scores, moves = model_output_to_move_distribution(board, result[0])
+        scores, moves = model_output_to_move_distribution(board, result[0], T=self.T)
         m = Categorical(logits=scores)
         return moves[m.sample()]
