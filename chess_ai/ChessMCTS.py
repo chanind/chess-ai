@@ -9,14 +9,11 @@ import numpy as np
 
 from .ChessModel import ChessModel
 from .translation.InputState import InputState
-from .translation.Action import Action, ACTION_CHANNELS
+from .translation.Action import ACTION_PROBS_SHAPE, Action
 
 EPS = 1e-8
 
 log = logging.getLogger(__name__)
-
-
-ACTION_PROBS_SHAPE = (ACTION_CHANNELS, 8, 8)
 
 
 def hash_board(board: chess.Board) -> int:
@@ -121,7 +118,7 @@ class ChessMCTS:
             self.Es[state_hash] = None
             if board.is_game_over():
                 outcome = board.outcome()
-                if board.is_stalemate():
+                if outcome.winner is None:
                     self.Es[state_hash] = 0
                 else:
                     self.Es[state_hash] = 1 if outcome.winner == board.turn else -1

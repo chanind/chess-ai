@@ -7,6 +7,7 @@ from .utils import get_coords, transform_board_index
 
 
 ACTION_CHANNELS = 73
+ACTION_PROBS_SHAPE = (ACTION_CHANNELS, 8, 8)
 
 
 QUEEN_DIRECTIONAL_MAPPING = {

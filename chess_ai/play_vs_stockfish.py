@@ -64,7 +64,7 @@ if __name__ == "__main__":
 
     print("Done!")
     outcome = res.outcome()
-    if res.is_stalemate():
+    if outcome.winner is None:
         print("Stalemate!")
     else:
         print("White wins" if outcome.winner == chess.WHITE else "Black wins")
