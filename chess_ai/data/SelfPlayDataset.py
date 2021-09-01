@@ -33,6 +33,7 @@ class SelfPlayDataset(Dataset):
 
     def __init__(
         self,
+        device: torch.device,
         mcts_simulations: int = 50,
         games_per_iteration: int = 100,
         max_recent_training_games: int = 200000,
@@ -45,6 +46,7 @@ class SelfPlayDataset(Dataset):
         self.max_recent_training_games = max_recent_training_games
         self.train_examples_history = []
         self.current_training_examples = []
+        self.device = device
 
     def generate_self_play_data(self, model: ChessModel):
         """
@@ -61,7 +63,9 @@ class SelfPlayDataset(Dataset):
             # bookkeeping
             log.info(f"Starting Iter #{i} ...")
 
-            mcts = ChessMCTS(model, self.mcts_simulations)  # reset search tree
+            mcts = ChessMCTS(
+                model, self.device, self.mcts_simulations
+            )  # reset search tree
             iteration_train_examples += self.selfplay_game(mcts)
 
             # save the iteration examples to the history

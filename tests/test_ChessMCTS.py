@@ -15,7 +15,7 @@ def test_ChessMCTS_runs():
         torch.tensor(2 * random() - 1).unsqueeze(0),
     )
     board = chess.Board()
-    mcts = ChessMCTS(model, num_simulations=10, cpuct=1.0)
+    mcts = ChessMCTS(model, "cpu", num_simulations=10, cpuct=1.0)
 
     probs = mcts.get_action_probabilities(board)
     assert probs.shape == (ACTION_CHANNELS, 8, 8)

@@ -49,7 +49,11 @@ class ChessMCTS:
     cpuct: float
 
     def __init__(
-        self, model: ChessModel, num_simulations: int = 50, cpuct: float = 1.0
+        self,
+        model: ChessModel,
+        device: torch.device,
+        num_simulations: int = 50,
+        cpuct: float = 1.0,
     ):
         self.model = model
         self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
@@ -62,6 +66,7 @@ class ChessMCTS:
 
         self.num_simulations = num_simulations
         self.cpuct = cpuct
+        self.device = device
 
     def get_action_probabilities(self, board, temp=1):
         """
@@ -131,7 +136,7 @@ class ChessMCTS:
             # TODO: can this be batched / done in parallel?
             with torch.no_grad():
                 action_probs_tensor, value_tensor = self.model(
-                    InputState(board).to_tensor().unsqueeze(0)
+                    InputState(board).to_tensor().unsqueeze(0).to(self.device)
                 )
                 # TODO: does it make more sense to keep everything in pytorch tensors?
                 action_probs = action_probs_tensor[0].detach().cpu().numpy()

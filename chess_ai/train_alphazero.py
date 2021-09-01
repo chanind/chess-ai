@@ -26,6 +26,7 @@ def train(
     max_recent_training_games=10000,
 ):
     selfplay_dataset = SelfPlayDataset(
+        device,
         mcts_simulations=mcts_simulations,
         games_per_iteration=games_per_iteration,
         max_recent_training_games=max_recent_training_games,

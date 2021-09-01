@@ -7,7 +7,7 @@ from chess_ai.data.SelfPlayDataset import SelfPlayDataset
 
 
 def test_SelfPlayDataset_inputs_and_outputs():
-    dataset = SelfPlayDataset(mcts_simulations=2, episodes_per_iteration=3)
+    dataset = SelfPlayDataset("cpu", mcts_simulations=2, games_per_iteration=3)
     # just return random scores
     model = lambda _: (
         torch.rand(*ACTION_PROBS_SHAPE).unsqueeze(0),
