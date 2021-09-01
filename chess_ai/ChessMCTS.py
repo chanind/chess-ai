@@ -135,7 +135,7 @@ class ChessMCTS:
             # leaf node
             # TODO: can this be batched / done in parallel?
             with torch.no_grad():
-                action_probs_tensor, value_tensor = self.model(
+                action_probs_tensor, value_tensor = self.model.predict(
                     InputState(board).to_tensor().unsqueeze(0).to(self.device)
                 )
                 # TODO: does it make more sense to keep everything in pytorch tensors?

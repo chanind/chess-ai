@@ -1,7 +1,5 @@
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.modules.batchnorm import BatchNorm1d
 
 # loosely based on https://github.com/kuangliu/pytorch-cifar
 
@@ -66,3 +64,12 @@ class ChessModel(nn.Module):
         policy = self.policy_out(res_out)
         value = self.value_out(res_out.view(res_out.shape[0], -1))
         return (policy, value)
+
+    def predict(self, x):
+        raw_policy, value = self.forward(x)
+        softmax_policy = (
+            raw_policy.view(raw_policy.shape[0], -1)
+            .softmax(dim=-1)
+            .view(raw_policy.shape)
+        )
+        return (softmax_policy, value)
