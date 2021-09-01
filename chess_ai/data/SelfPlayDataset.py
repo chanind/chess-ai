@@ -34,12 +34,12 @@ class SelfPlayDataset(Dataset):
     def __init__(
         self,
         mcts_simulations: int = 50,
-        episodes_per_iteration: int = 100,
+        games_per_iteration: int = 100,
         max_recent_training_games: int = 200000,
         temp_threshold: int = 15,
     ):
         super().__init__()
-        self.episodes_per_iteration = episodes_per_iteration
+        self.games_per_iteration = games_per_iteration
         self.mcts_simulations = mcts_simulations
         self.temp_threshold = temp_threshold
         self.max_recent_training_games = max_recent_training_games
@@ -57,12 +57,12 @@ class SelfPlayDataset(Dataset):
 
         iteration_train_examples = deque([], maxlen=self.max_recent_training_games)
 
-        for i in tqdm(range(self.episodes_per_iteration), desc="Self Play"):
+        for i in tqdm(range(self.games_per_iteration), desc="Self Play"):
             # bookkeeping
             log.info(f"Starting Iter #{i} ...")
 
             mcts = ChessMCTS(model, self.mcts_simulations)  # reset search tree
-            iteration_train_examples += self.execute_episode(mcts)
+            iteration_train_examples += self.selfplay_game(mcts)
 
             # save the iteration examples to the history
             self.train_examples_history.append(iteration_train_examples)
@@ -82,7 +82,7 @@ class SelfPlayDataset(Dataset):
                 self.current_training_examples.extend(e)
             shuffle(self.current_training_examples)
 
-    def execute_episode(self, mcts: ChessMCTS):
+    def selfplay_game(self, mcts: ChessMCTS):
         """
         This function executes one episode of self-play, starting with player 1.
         As the game is played, each turn is added as a training example to
