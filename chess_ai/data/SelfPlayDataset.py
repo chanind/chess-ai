@@ -1,3 +1,4 @@
+from promise import Promise
 from collections import deque
 from random import shuffle
 from typing import Tuple
@@ -6,12 +7,12 @@ import numpy as np
 import chess
 import torch
 import logging
-from tqdm import tqdm
 
 from chess_ai.translation.Action import ACTION_PROBS_SHAPE, Action
 from chess_ai.translation.InputState import InputState
 from chess_ai.ChessModel import ChessModel
-from chess_ai.ChessMCTS import ChessMCTS
+from chess_ai.AsyncChessMCTS import AsyncChessMCTS
+from chess_ai.AsyncPredictDataLoader import AsyncPredictDataLoader
 
 # based on https://github.com/suragnair/alpha-zero-general/blob/master/Coach.py
 
@@ -48,7 +49,7 @@ class SelfPlayDataset(Dataset):
         self.current_training_examples = []
         self.device = device
 
-    def generate_self_play_data(self, model: ChessModel):
+    async def generate_self_play_data(self, model: ChessModel):
         """
         Performs numIters iterations with numEps episodes of self-play in each
         iteration. After every iteration, it retrains neural network with
@@ -57,36 +58,47 @@ class SelfPlayDataset(Dataset):
         only if it wins >= updateThreshold fraction of games.
         """
 
-        iteration_train_examples = deque([], maxlen=self.max_recent_training_games)
+        loader = AsyncPredictDataLoader(model)
 
-        for i in tqdm(range(self.games_per_iteration), desc="Self Play"):
-            # bookkeeping
-            log.info(f"Starting Iter #{i} ...")
+        await Promise.all(
+            [
+                self.generate_single_selfplay_game_data(loader, i)
+                for i in range(self.games_per_iteration)
+            ]
+        )
 
-            mcts = ChessMCTS(
-                model, self.device, self.mcts_simulations
-            )  # reset search tree
-            iteration_train_examples += self.selfplay_game(mcts)
+    async def generate_single_selfplay_game_data(
+        self, loader: AsyncPredictDataLoader, gamenum: int
+    ):
+        # bookkeeping
+        log.info(f"Starting game {gamenum} ...")
 
-            # save the iteration examples to the history
-            self.train_examples_history.append(iteration_train_examples)
+        mcts = AsyncChessMCTS(
+            loader, self.device, self.mcts_simulations
+        )  # reset search tree
+        train_examples = await self.selfplay_game(mcts)
 
-            if len(self.train_examples_history) > self.max_recent_training_games:
-                log.warning(
-                    f"Removing the oldest entry in train_examples_history. len(train_examples_history) = {len(self.train_examples_history)}"
-                )
-                self.train_examples_history.pop(0)
-            # backup history to a file
-            # NB! the examples were collected using the model from the previous iteration, so (i-1)
-            # self.saveTrainExamples(i - 1)
+        # save the iteration examples to the history
+        self.train_examples_history.append(train_examples)
 
-            # shuffle examples before training
-            self.current_training_examples = []
-            for e in self.train_examples_history:
-                self.current_training_examples.extend(e)
-            shuffle(self.current_training_examples)
+        if len(self.train_examples_history) > self.max_recent_training_games:
+            log.warning(
+                f"Removing the oldest entry in train_examples_history. len(train_examples_history) = {len(self.train_examples_history)}"
+            )
+            self.train_examples_history.pop(0)
+        # backup history to a file
+        # NB! the examples were collected using the model from the previous iteration, so (i-1)
+        # self.saveTrainExamples(i - 1)
 
-    def selfplay_game(self, mcts: ChessMCTS):
+        # shuffle examples before training
+        self.current_training_examples = []
+        for e in self.train_examples_history:
+            self.current_training_examples.extend(e)
+        shuffle(self.current_training_examples)
+
+        log.info(f"completed game {gamenum}")
+
+    async def selfplay_game(self, mcts: AsyncChessMCTS):
         """
         This function executes one episode of self-play, starting with player 1.
         As the game is played, each turn is added as a training example to
@@ -108,7 +120,7 @@ class SelfPlayDataset(Dataset):
             episodeStep += 1
             temp = int(episodeStep < self.temp_threshold)
 
-            pi = mcts.get_action_probabilities(board, temp=temp)
+            pi = await mcts.get_action_probabilities(board, temp=temp)
             train_examples.append((InputState(board), pi, 0))
 
             action_index = np.random.choice(pi.size, p=pi.flatten())

@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch import optim
 from tqdm import tqdm
+import asyncio
 
 from .ChessModel import ChessModel
 from .data.SelfPlayDataset import SelfPlayDataset
@@ -13,7 +14,7 @@ loss_pi = nn.CrossEntropyLoss()
 loss_value = nn.MSELoss()
 
 
-def train(
+def train_alphazero(
     device: torch.device,
     model: ChessModel,
     epochs: int = 100,
@@ -39,7 +40,9 @@ def train(
         train_loss = 0
         num_train_batches = 0
         model.eval()
-        selfplay_dataset.generate_self_play_data(model)
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(selfplay_dataset.generate_self_play_data(model))
+        loop.close()
         train_loader = DataLoader(
             selfplay_dataset,
             batch_size=batch_size,
@@ -82,5 +85,5 @@ def train(
 if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = ChessModel()
-    train(device, model)
+    train_alphazero(device, model)
     torch.save(model.state_dict(), "chess_value_model.pth")

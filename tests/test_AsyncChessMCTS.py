@@ -1,23 +1,32 @@
+from chess_ai.AsyncPredictDataLoader import AsyncPredictDataLoader
 import numpy as np
 import torch
 import chess
 import pytest
 from random import random
 
-from chess_ai.ChessMCTS import ChessMCTS
+from chess_ai.AsyncChessMCTS import AsyncChessMCTS
 from chess_ai.translation.Action import Action, ACTION_CHANNELS
 
 
-def test_ChessMCTS_runs():
-    # just return random scores
-    model = lambda _: (
-        torch.rand(ACTION_CHANNELS, 8, 8).unsqueeze(0),
-        torch.tensor(2 * random() - 1).unsqueeze(0),
-    )
-    board = chess.Board()
-    mcts = ChessMCTS(model, "cpu", num_simulations=10, cpuct=1.0)
+class MockModel:
+    def predict(self, input):
+        return (
+            torch.rand(input.shape[0], ACTION_CHANNELS, 8, 8),
+            torch.ones(input.shape[0]) * (2 * random() - 1),
+        )
 
-    probs = mcts.get_action_probabilities(board)
+
+@pytest.mark.asyncio
+async def test_AsyncChessMCTS_runs():
+    # just return random scores
+    model = MockModel()
+    board = chess.Board()
+    mcts = AsyncChessMCTS(
+        AsyncPredictDataLoader(model), "cpu", num_simulations=10, cpuct=1.0
+    )
+
+    probs = await mcts.get_action_probabilities(board)
     assert probs.shape == (ACTION_CHANNELS, 8, 8)
     assert np.sum(probs) == pytest.approx(1.0)
     assert np.max(probs) <= 1.0

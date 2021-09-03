@@ -6,10 +6,12 @@ import torch
 from typing import List, Tuple
 import chess
 import numpy as np
+from promise import Promise
 
 from .ChessModel import ChessModel
 from .translation.InputState import InputState
 from .translation.Action import ACTION_PROBS_SHAPE, Action
+from .AsyncPredictDataLoader import AsyncPredictDataLoader
 
 EPS = 1e-8
 
@@ -38,24 +40,23 @@ def generate_actions_mask_and_coords(
     return mask, valid_actions
 
 
-class ChessMCTS:
+class AsyncChessMCTS:
     """
     Monte Carlo Tree Search for Chess
     """
 
-    model: ChessModel
+    loader: AsyncPredictDataLoader
 
     num_simulations: int
     cpuct: float
 
     def __init__(
         self,
-        model: ChessModel,
+        loader: AsyncPredictDataLoader,
         device: torch.device,
         num_simulations: int = 50,
         cpuct: float = 1.0,
     ):
-        self.model = model
         self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
         self.Nsa = {}  # stores #times edge s,a was visited
         self.Ns = {}  # stores #times board s was visited
@@ -67,16 +68,16 @@ class ChessMCTS:
         self.num_simulations = num_simulations
         self.cpuct = cpuct
         self.device = device
+        self.loader = loader
 
-    def get_action_probabilities(self, board, temp=1):
+    async def get_action_probabilities(self, board, temp=1):
         """
         This function performs num_simulations simulations of MCTS starting from board.
         Returns:
             probs: a policy vector where the probability of the ith action is
                    proportional to Nsa[(s,a)]**(1./temp)
         """
-        for _ in range(self.num_simulations):
-            self.search(board)
+        await Promise.all([self.search(board) for _ in range(self.num_simulations)])
 
         state_hash = hash_board(board)
         counts = np.zeros(ACTION_PROBS_SHAPE)
@@ -100,7 +101,7 @@ class ChessMCTS:
         probs = counts / counts_sum
         return probs
 
-    def search(self, board: chess.Board):
+    async def search(self, board: chess.Board):
         """
         This function performs one iteration of MCTS. It is recursively called
         till a leaf node is found. The action chosen at each node is one that
@@ -135,7 +136,7 @@ class ChessMCTS:
             # leaf node
             # TODO: can this be batched / done in parallel?
             with torch.no_grad():
-                action_probs_tensor, value_tensor = self.model.predict(
+                action_probs_tensor, value_tensor = await self.loader.load(
                     InputState(board).to_tensor().unsqueeze(0).to(self.device)
                 )
                 # TODO: does it make more sense to keep everything in pytorch tensors?
@@ -186,7 +187,7 @@ class ChessMCTS:
         # TODO: this might be slow to copy the whole board, try seeing if we can get away with pushing / popping afterwards in the future
         next_board = board.copy()
         next_board.push(best_action.move)
-        value = self.search(next_board)
+        value = await self.search(next_board)
 
         if (state_hash, best_action.coords) in self.Qsa:
             self.Qsa[(state_hash, best_action.coords)] = (
