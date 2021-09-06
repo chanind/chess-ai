@@ -54,6 +54,7 @@ class ChessMCTS:
         device: torch.device,
         num_simulations: int = 50,
         cpuct: float = 1.0,
+        max_len = 7
     ):
         self.model = model
         self.Qsa = {}  # stores Q values for s,a (as defined in the paper)
@@ -64,9 +65,15 @@ class ChessMCTS:
         self.Es = {}  # stores game.getGameEnded ended for board s
         self.Vs = {}  # stores game.getValidMoves for board s
 
+        self.Lb = {}  # last batch this s, a was visited. Useful for batching 
+
         self.num_simulations = num_simulations
         self.cpuct = cpuct
         self.device = device
+
+        self.queue = []
+        self.current_batch = 0
+        self.max_len = max_len
 
     def get_action_probabilities(self, board, temp=1):
         """
@@ -100,7 +107,7 @@ class ChessMCTS:
         probs = counts / counts_sum
         return probs
 
-    def search(self, board: chess.Board):
+    def search(self, board: chess.Board, path = []):
         """
         This function performs one iteration of MCTS. It is recursively called
         till a leaf node is found. The action chosen at each node is one that
@@ -129,36 +136,18 @@ class ChessMCTS:
                     self.Es[state_hash] = 1 if outcome.winner == board.turn else -1
         if self.Es[state_hash] is not None:
             # terminal node
-            return -self.Es[state_hash]
+            self.evaluate()
+            self.update_back(path, -self.Es[state_hash])
+            return
 
         if state_hash not in self.Ps:
             # leaf node
             # TODO: can this be batched / done in parallel?
-            with torch.no_grad():
-                action_probs_tensor, value_tensor = self.model.predict(
-                    InputState(board).to_tensor().unsqueeze(0).to(self.device)
-                )
-                # TODO: does it make more sense to keep everything in pytorch tensors?
-                action_probs = action_probs_tensor[0].detach().cpu().numpy()
-                value = value_tensor[0].detach().cpu().numpy()
-            valid_actions_mask, valid_actions = generate_actions_mask_and_coords(board)
-            valid_action_probs = action_probs * valid_actions_mask
-            self.Ps[state_hash] = valid_action_probs
-            sum_Ps_s = np.sum(self.Ps[state_hash])
-            if sum_Ps_s > 0:
-                self.Ps[state_hash] /= sum_Ps_s  # renormalize
-            else:
-                # if all valid moves were masked make all valid moves equally probable
-
-                # NB! All valid moves may be masked if either your model architecture is insufficient or you've get overfitting or something else.
-                # If you have got dozens or hundreds of these messages you should pay attention to your model and/or training process.
-                log.error("All valid moves were masked, doing a workaround.")
-                self.Ps[state_hash] = valid_action_probs + valid_actions_mask
-                self.Ps[state_hash] /= np.sum(self.Ps[state_hash])
-
-            self.Vs[state_hash] = valid_actions
-            self.Ns[state_hash] = 0
-            return -value
+            # 
+            self.queue.append((path, state_hash, board.copy()))
+            if len(self.queue)>self.max_len:
+              self.evaluate()
+            return
 
         valid_actions = self.Vs[state_hash]
         best_action_score = -float("inf")
@@ -166,6 +155,11 @@ class ChessMCTS:
 
         # pick the action with the highest upper confidence bound
         for action in valid_actions:
+            if (state_hash, action.coords) in self.Lb and (
+                self.Lb[(state_hash, action.coords)]>=self.current_batch):
+                correction = 1
+            else:
+                correction = 0
             if (state_hash, action.coords) in self.Qsa:
                 qval = self.Qsa[(state_hash, action.coords)]
                 action_prob = self.Ps[state_hash][action.coords]
@@ -176,8 +170,8 @@ class ChessMCTS:
                 score = (
                     self.cpuct
                     * self.Ps[state_hash][action.coords]
-                    * math.sqrt(self.Ns[state_hash] + EPS)
-                )  # Q = 0 ?
+                    * math.sqrt(self.Ns[state_hash] + EPS + correction)
+                )  / (1 + correction)
 
             if score > best_action_score:
                 best_action_score = score
@@ -186,19 +180,57 @@ class ChessMCTS:
         # TODO: this might be slow to copy the whole board, try seeing if we can get away with pushing / popping afterwards in the future
         next_board = board.copy()
         next_board.push(best_action.move)
-        value = self.search(next_board)
+        path.append((state_hash, best_action.coords))
+        self.search(next_board, path=path)
 
-        if (state_hash, best_action.coords) in self.Qsa:
-            self.Qsa[(state_hash, best_action.coords)] = (
-                self.Nsa[(state_hash, best_action.coords)]
-                * self.Qsa[(state_hash, best_action.coords)]
-                + value
-            ) / (self.Nsa[(state_hash, best_action.coords)] + 1)
-            self.Nsa[(state_hash, best_action.coords)] += 1
+    def evaluate(self):
+        if len(self.queue)<1:
+          return
+        paths, states, boards = zip(*self.queue)
+        input = torch.cat([InputState(board).to_tensor().unsqueeze(0) for board in boards]).to(self.device)
+        with torch.no_grad():
+            action_probs_tensor, value_tensor = self.model.predict(input)
+            # TODO: does it make more sense to keep everything in pytorch tensors?
+            action_probs = action_probs_tensor.detach().cpu()
+            value = value_tensor.detach().cpu()
+        
+        for i, board in enumerate(boards):
+            self.update(states[i], value[i].item(), paths[i], action_probs[i], board)
+        self.queue = []
+        self.current_batch += 1
 
+    
+    def update(self, state_hash, value, path, action_probs, board):
+        valid_actions_mask, valid_actions = generate_actions_mask_and_coords(board)
+        valid_action_probs = action_probs.numpy() * valid_actions_mask
+        self.Ps[state_hash] = valid_action_probs
+        sum_Ps_s = np.sum(self.Ps[state_hash])
+        if sum_Ps_s > 0:
+            self.Ps[state_hash] /= sum_Ps_s  # renormalize
         else:
-            self.Qsa[(state_hash, best_action.coords)] = value
-            self.Nsa[(state_hash, best_action.coords)] = 1
+            # if all valid moves were masked make all valid moves equally probable
 
-        self.Ns[state_hash] += 1
-        return -value
+            # NB! All valid moves may be masked if either your model architecture is insufficient or you've get overfitting or something else.
+            # If you have got dozens or hundreds of these messages you should pay attention to your model and/or training process.
+            log.error("All valid moves were masked, doing a workaround.")
+            self.Ps[state_hash] = valid_action_probs + valid_actions_mask
+            self.Ps[state_hash] /= np.sum(self.Ps[state_hash])
+
+        self.Vs[state_hash] = valid_actions
+        self.Ns[state_hash] = 0
+        self.update_back(path, -value)
+
+    def update_back(self, path, value):
+        while path:
+          state_hash, best_action_coords = path.pop()
+          if (state_hash, best_action_coords) in self.Qsa:
+              self.Qsa[(state_hash, best_action_coords)] = (
+                  self.Nsa[(state_hash, best_action_coords)]
+                  * self.Qsa[(state_hash, best_action_coords)]
+                  + value
+              ) / (self.Nsa[(state_hash, best_action_coords)] + 1)
+              self.Nsa[(state_hash, best_action_coords)] += 1
+          else:
+              self.Qsa[(state_hash, best_action_coords)] = value
+              self.Nsa[(state_hash, best_action_coords)] = 1
+          value = -value
