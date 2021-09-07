@@ -13,7 +13,8 @@ class AsyncPredictDataLoader(DataLoader):
         self.model = model
 
     async def batch_load_fn(self, inputs: Sequence[torch.Tensor]):
-        pis, values = self.model.predict(torch.cat(inputs, dim=0))
+        with torch.no_grad():
+            pis, values = self.model.predict(torch.cat(inputs, dim=0))
         return [
             (pis[i, :, :].unsqueeze(0), values[i].unsqueeze(0))
             for i in range(len(inputs))

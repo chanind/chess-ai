@@ -137,20 +137,18 @@ class AsyncChessMCTS:
             await self.loadingCoros[state_hash]
         if state_hash not in self.Ps:
             # leaf node
-            # TODO: can this be batched / done in parallel?
-            with torch.no_grad():
-                loadingCoro = self.loader.load(
-                    InputState(board).to_tensor().unsqueeze(0).to(self.device)
-                )
-                self.loadingCoros[state_hash] = loadingCoro
-                action_probs_tensor, value_tensor = await loadingCoro
-                del self.loadingCoros[
-                    state_hash
-                ]  # remove this from loading coros list so we don't block any other loads
+            loadingCoro = self.loader.load(
+                InputState(board).to_tensor().unsqueeze(0).to(self.device)
+            )
+            self.loadingCoros[state_hash] = loadingCoro
+            action_probs_tensor, value_tensor = await loadingCoro
+            del self.loadingCoros[
+                state_hash
+            ]  # remove this from loading coros list so we don't block any other loads
 
-                # TODO: does it make more sense to keep everything in pytorch tensors?
-                action_probs = action_probs_tensor[0].detach().cpu().numpy()
-                value = value_tensor[0].detach().cpu().numpy()
+            # TODO: does it make more sense to keep everything in pytorch tensors?
+            action_probs = action_probs_tensor[0].detach().cpu().numpy()
+            value = value_tensor[0].detach().cpu().numpy()
             valid_actions_mask, valid_actions = generate_actions_mask_and_coords(board)
             valid_action_probs = action_probs * valid_actions_mask
             self.Ps[state_hash] = valid_action_probs

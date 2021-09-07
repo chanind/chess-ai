@@ -151,4 +151,8 @@ class SelfPlayDataset(Dataset):
 
     def __getitem__(self, idx):
         input_state, pi, outcome = self.current_training_examples[idx]
-        return (input_state.to_tensor(), torch.from_numpy(pi), torch.tensor(outcome))
+        return (
+            input_state.to_tensor(),
+            torch.from_numpy(pi),
+            torch.tensor(outcome, dtype=torch.float),
+        )
