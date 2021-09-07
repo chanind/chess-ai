@@ -1,5 +1,3 @@
-from promise import Promise
-from collections import deque
 from random import shuffle
 from typing import Tuple
 from torch.utils.data import Dataset
@@ -7,6 +5,7 @@ import numpy as np
 import chess
 import torch
 import logging
+import asyncio
 
 from chess_ai.translation.Action import ACTION_PROBS_SHAPE, Action
 from chess_ai.translation.InputState import InputState
@@ -49,7 +48,7 @@ class SelfPlayDataset(Dataset):
         self.current_training_examples = []
         self.device = device
 
-    async def generate_self_play_data(self, model: ChessModel):
+    async def generate_self_play_data(self, model: ChessModel, batch_size=None):
         """
         Performs numIters iterations with numEps episodes of self-play in each
         iteration. After every iteration, it retrains neural network with
@@ -58,10 +57,10 @@ class SelfPlayDataset(Dataset):
         only if it wins >= updateThreshold fraction of games.
         """
 
-        loader = AsyncPredictDataLoader(model)
+        loader = AsyncPredictDataLoader(model, max_batch_size=batch_size)
 
-        await Promise.all(
-            [
+        await asyncio.gather(
+            *[
                 self.generate_single_selfplay_game_data(loader, i)
                 for i in range(self.games_per_iteration)
             ]

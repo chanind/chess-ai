@@ -3,12 +3,11 @@
 import logging
 import math
 import torch
+import asyncio
 from typing import List, Tuple
 import chess
 import numpy as np
-from promise import Promise
 
-from .ChessModel import ChessModel
 from .translation.InputState import InputState
 from .translation.Action import ACTION_PROBS_SHAPE, Action
 from .AsyncPredictDataLoader import AsyncPredictDataLoader
@@ -65,6 +64,8 @@ class AsyncChessMCTS:
         self.Es = {}  # stores game.getGameEnded ended for board s
         self.Vs = {}  # stores game.getValidMoves for board s
 
+        self.loadingCoros = {}  # Currently loading Ps values, can await this to block
+
         self.num_simulations = num_simulations
         self.cpuct = cpuct
         self.device = device
@@ -77,7 +78,7 @@ class AsyncChessMCTS:
             probs: a policy vector where the probability of the ith action is
                    proportional to Nsa[(s,a)]**(1./temp)
         """
-        await Promise.all([self.search(board) for _ in range(self.num_simulations)])
+        await asyncio.gather(*[self.search(board) for _ in range(self.num_simulations)])
 
         state_hash = hash_board(board)
         counts = np.zeros(ACTION_PROBS_SHAPE)
@@ -132,19 +133,28 @@ class AsyncChessMCTS:
             # terminal node
             return -self.Es[state_hash]
 
+        if state_hash in self.loadingCoros:
+            await self.loadingCoros[state_hash]
         if state_hash not in self.Ps:
             # leaf node
             # TODO: can this be batched / done in parallel?
             with torch.no_grad():
-                action_probs_tensor, value_tensor = await self.loader.load(
+                loadingCoro = self.loader.load(
                     InputState(board).to_tensor().unsqueeze(0).to(self.device)
                 )
+                self.loadingCoros[state_hash] = loadingCoro
+                action_probs_tensor, value_tensor = await loadingCoro
+                del self.loadingCoros[
+                    state_hash
+                ]  # remove this from loading coros list so we don't block any other loads
+
                 # TODO: does it make more sense to keep everything in pytorch tensors?
                 action_probs = action_probs_tensor[0].detach().cpu().numpy()
                 value = value_tensor[0].detach().cpu().numpy()
             valid_actions_mask, valid_actions = generate_actions_mask_and_coords(board)
             valid_action_probs = action_probs * valid_actions_mask
             self.Ps[state_hash] = valid_action_probs
+
             sum_Ps_s = np.sum(self.Ps[state_hash])
             if sum_Ps_s > 0:
                 self.Ps[state_hash] /= sum_Ps_s  # renormalize
@@ -159,6 +169,7 @@ class AsyncChessMCTS:
 
             self.Vs[state_hash] = valid_actions
             self.Ns[state_hash] = 0
+
             return -value
 
         valid_actions = self.Vs[state_hash]

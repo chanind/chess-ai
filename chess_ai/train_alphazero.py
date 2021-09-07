@@ -23,7 +23,7 @@ def train_alphazero(
     stockfish_binary=None,
     mcts_simulations=50,
     num_workers: int = 2,
-    games_per_iteration: int = 100,
+    games_per_iteration: int = 1000,
     max_recent_training_games=10000,
 ):
     selfplay_dataset = SelfPlayDataset(
@@ -41,7 +41,9 @@ def train_alphazero(
         num_train_batches = 0
         model.eval()
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(selfplay_dataset.generate_self_play_data(model))
+        loop.run_until_complete(
+            selfplay_dataset.generate_self_play_data(model, batch_size=batch_size)
+        )
         loop.close()
         train_loader = DataLoader(
             selfplay_dataset,
