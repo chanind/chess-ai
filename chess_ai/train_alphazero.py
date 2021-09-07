@@ -18,7 +18,7 @@ def criterion_pi(output_log_probs, target_pis):
 criterion_value = nn.MSELoss()
 
 
-async def train_alphazero(
+def train_alphazero(
     device: torch.device,
     model: ChessModel,
     epochs: int = 100,
@@ -44,7 +44,12 @@ async def train_alphazero(
         train_loss = 0
         num_train_batches = 0
         model.eval()
-        await selfplay_dataset.generate_self_play_data(model, batch_size=batch_size)
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(
+            selfplay_dataset.generate_self_play_data(model, batch_size=batch_size)
+        )
+        loop.close()
+
         train_loader = DataLoader(
             selfplay_dataset,
             batch_size=batch_size,
@@ -89,7 +94,5 @@ async def train_alphazero(
 if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = ChessModel()
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(train_alphazero(device, model))
-    loop.close()
+    train_alphazero(device, model)
     torch.save(model.state_dict(), "chess_value_model.pth")
