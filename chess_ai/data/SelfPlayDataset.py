@@ -6,6 +6,7 @@ import chess
 import torch
 import logging
 import asyncio
+from tqdm import tqdm
 
 from chess_ai.translation.Action import ACTION_PROBS_SHAPE, Action
 from chess_ai.translation.InputState import InputState
@@ -58,20 +59,17 @@ class SelfPlayDataset(Dataset):
         """
 
         loader = AsyncPredictDataLoader(model, max_batch_size=batch_size)
-
+        pbar = tqdm(total=self.games_per_iteration, unit="game")
         await asyncio.gather(
             *[
-                self.generate_single_selfplay_game_data(loader, i)
-                for i in range(self.games_per_iteration)
+                self.generate_single_selfplay_game_data(loader, pbar)
+                for _ in range(self.games_per_iteration)
             ]
         )
 
     async def generate_single_selfplay_game_data(
-        self, loader: AsyncPredictDataLoader, gamenum: int
+        self, loader: AsyncPredictDataLoader, pbar
     ):
-        # bookkeeping
-        log.info(f"Starting game {gamenum} ...")
-
         mcts = AsyncChessMCTS(
             loader, self.device, self.mcts_simulations
         )  # reset search tree
@@ -94,8 +92,7 @@ class SelfPlayDataset(Dataset):
         for e in self.train_examples_history:
             self.current_training_examples.extend(e)
         shuffle(self.current_training_examples)
-
-        log.info(f"completed game {gamenum}")
+        pbar.update(n=1)  # increment the progress bar
 
     async def selfplay_game(self, mcts: AsyncChessMCTS):
         """
