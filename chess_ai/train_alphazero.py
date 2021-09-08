@@ -98,6 +98,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--games-per-iteration", type=int, default=100)
     parser.add_argument("--mcts-simulations", type=int, default=15)
+    parser.add_argument("--max-recent-training-games", type=int, default=1000)
     parser.add_argument("--evaluate-after-batch", action="store_true")
     parser.add_argument("--stockfish-binary", default=None)
     args = parser.parse_args()
@@ -112,5 +113,6 @@ if __name__ == "__main__":
         games_per_iteration=args.games_per_iteration,
         evaluate_after_batch=args.evaluate_after_batch,
         stockfish_binary=args.stockfish_binary,
+        max_recent_training_games=args.max_recent_training_games,
     )
     torch.save(model.state_dict(), args.model_file)
