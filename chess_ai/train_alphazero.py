@@ -5,6 +5,7 @@ from torch import optim
 from tqdm import tqdm
 import asyncio
 import torch.nn.functional as F
+import argparse
 
 from .ChessModel import ChessModel
 from .data.SelfPlayDataset import SelfPlayDataset
@@ -92,7 +93,24 @@ def train_alphazero(
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model-file", default="chess_alphazero_model.pth")
+    parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("-g, --games-per-iteration", type=int, default=100)
+    parser.add_argument("-m, --mcts-simulations", type=int, default=15)
+    parser.add_argument("--evaluate-after-batch", action="store_true")
+    parser.add_argument("--stockfish-binary", default=None)
+    args = parser.parse_args()
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = ChessModel()
-    train_alphazero(device, model)
-    torch.save(model.state_dict(), "chess_value_model.pth")
+    train_alphazero(
+        device,
+        model,
+        batch_size=args.batch_size,
+        mcts_simulations=args.mcts_simulations,
+        games_per_iteration=args.games_per_iteration,
+        evaluate_after_batch=args.evaluate_after_batch,
+        stockfish_binary=args.stockfish_finary,
+    )
+    torch.save(model.state_dict(), args.model_file)
