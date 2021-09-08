@@ -8,7 +8,7 @@ import logging
 import asyncio
 from tqdm import tqdm
 
-from chess_ai.translation.Action import ACTION_PROBS_SHAPE, Action
+from chess_ai.translation.Action import ACTION_PROBS_SHAPE, Action, unravel_action_index
 from chess_ai.translation.InputState import InputState
 from chess_ai.ChessModel import ChessModel
 from chess_ai.AsyncChessMCTS import AsyncChessMCTS
@@ -120,10 +120,11 @@ class SelfPlayDataset(Dataset):
             train_examples.append((InputState(board), pi, 0))
 
             action_index = np.random.choice(pi.size, p=pi.flatten())
-            action_coord = np.unravel_index(action_index, ACTION_PROBS_SHAPE)
+            action_coord = unravel_action_index(action_index)
 
             move = find_move_from_action_coord(action_coord, board)
 
+            board = board.copy()
             board.push(move)
 
             if board.is_game_over():

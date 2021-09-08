@@ -2,12 +2,18 @@ from typing import Tuple
 import chess
 import torch
 import numpy as np
+from functools import lru_cache
 
 from .utils import get_coords, transform_board_index
 
 
 ACTION_CHANNELS = 73
 ACTION_PROBS_SHAPE = (ACTION_CHANNELS, 8, 8)
+
+
+@lru_cache(maxsize=None)
+def unravel_action_index(index: int) -> Tuple[int, int, int]:
+    return np.unravel_index(index, ACTION_PROBS_SHAPE)
 
 
 QUEEN_DIRECTIONAL_MAPPING = {

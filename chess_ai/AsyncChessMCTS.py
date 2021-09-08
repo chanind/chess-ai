@@ -7,9 +7,12 @@ import asyncio
 from typing import List, Tuple
 import chess
 import numpy as np
+from functools import lru_cache
+from cachetools import cached, LRUCache
+from cachetools.keys import hashkey
 
 from .translation.InputState import InputState
-from .translation.Action import ACTION_PROBS_SHAPE, Action
+from .translation.Action import ACTION_PROBS_SHAPE, Action, unravel_action_index
 from .AsyncPredictDataLoader import AsyncPredictDataLoader
 
 EPS = 1e-8
@@ -17,11 +20,39 @@ EPS = 1e-8
 log = logging.getLogger(__name__)
 
 
+TOTAL_ACTION_INDICES = np.prod(ACTION_PROBS_SHAPE)
+
+
 def hash_board(board: chess.Board) -> int:
-    return hash(board.fen())
+    return hash(
+        (hash(board._transposition_key()), board.fullmove_number, board.halfmove_clock)
+    )
 
 
+@cached(
+    cache=LRUCache(maxsize=100000),
+    key=lambda board_hash, _board, move: hashkey(board_hash, move.uci()),
+)
+def get_next_board(_board_hash: str, board: chess.Board, move: chess.Move):
+    next_board = board.copy()
+    next_board.push(move)
+    return next_board
+
+
+@cached(
+    cache=LRUCache(maxsize=100000),
+    key=lambda board_hash, _board: hashkey(board_hash),
+)
+def get_board_input_tensor(_board_hash: str, board: chess.Board):
+    return InputState(board).to_tensor()
+
+
+@cached(
+    cache=LRUCache(maxsize=100000),
+    key=lambda board_hash, _board: hashkey(board_hash),
+)
 def generate_actions_mask_and_coords(
+    _board_hash: str,
     board: chess.Board,
 ) -> Tuple[np.ndarray, List[Action]]:
     """
@@ -82,17 +113,15 @@ class AsyncChessMCTS:
 
         state_hash = hash_board(board)
         counts = np.zeros(ACTION_PROBS_SHAPE)
-        for action_index in range(np.prod(ACTION_PROBS_SHAPE)):
-            action_coord = np.unravel_index(action_index, ACTION_PROBS_SHAPE)
+        for action_index in range(TOTAL_ACTION_INDICES):
+            action_coord = unravel_action_index(action_index)
             if (state_hash, action_coord) in self.Nsa:
                 counts[action_coord] = self.Nsa[(state_hash, action_coord)]
 
         if temp == 0:
             best_action_indices = np.argwhere(counts.flatten() == np.max(counts))
             chosen_action_index = np.random.choice(best_action_indices.flatten())
-            chosen_action_coord = np.unravel_index(
-                chosen_action_index, ACTION_PROBS_SHAPE
-            )
+            chosen_action_coord = unravel_action_index(chosen_action_index)
             probs = np.zeros(ACTION_PROBS_SHAPE)
             probs[chosen_action_coord] = 1
             return probs
@@ -138,7 +167,7 @@ class AsyncChessMCTS:
         if state_hash not in self.Ps:
             # leaf node
             loadingCoro = self.loader.load(
-                InputState(board).to_tensor().unsqueeze(0).to(self.device)
+                get_board_input_tensor(state_hash, board).unsqueeze(0).to(self.device)
             )
             self.loadingCoros[state_hash] = loadingCoro
             action_probs_tensor, value_tensor = await loadingCoro
@@ -149,7 +178,9 @@ class AsyncChessMCTS:
             # TODO: does it make more sense to keep everything in pytorch tensors?
             action_probs = action_probs_tensor[0].detach().cpu().numpy()
             value = value_tensor[0].detach().cpu().numpy()
-            valid_actions_mask, valid_actions = generate_actions_mask_and_coords(board)
+            valid_actions_mask, valid_actions = generate_actions_mask_and_coords(
+                state_hash, board
+            )
             valid_action_probs = action_probs * valid_actions_mask
             self.Ps[state_hash] = valid_action_probs
 
@@ -194,8 +225,7 @@ class AsyncChessMCTS:
                 best_action = action
 
         # TODO: this might be slow to copy the whole board, try seeing if we can get away with pushing / popping afterwards in the future
-        next_board = board.copy()
-        next_board.push(best_action.move)
+        next_board = get_next_board(state_hash, board, best_action.move)
         value = await self.search(next_board)
 
         if (state_hash, best_action.coords) in self.Qsa:

@@ -25,9 +25,9 @@ def train_alphazero(
     batch_size: int = 256,
     evaluate_after_batch=True,
     stockfish_binary=None,
-    mcts_simulations=50,
+    mcts_simulations=5,
     num_workers: int = 2,
-    games_per_iteration: int = 1000,
+    games_per_iteration: int = 10,
     max_recent_training_games=10000,
 ):
     selfplay_dataset = SelfPlayDataset(

@@ -62,6 +62,14 @@ python2 = ["typed-ast (>=1.4.2)"]
 uvloop = ["uvloop (>=0.15.2)"]
 
 [[package]]
+name = "cachetools"
+version = "4.2.2"
+description = "Extensible memoizing collections and decorators"
+category = "main"
+optional = false
+python-versions = "~=3.5"
+
+[[package]]
 name = "chess"
 version = "1.6.1"
 description = "A chess library with move generation and validation, Polyglot opening book probing, PGN reading and writing, Gaviota tablebase probing, Syzygy tablebase probing, and XBoard/UCI engine communication."
@@ -293,7 +301,7 @@ python-versions = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "8aa0e89cf7ff64181fe614bb692a3e6dc95e3b33ce4ec4a3c046333810093aa6"
+content-hash = "1e2220e0fd762971ff3e07028ea3ff37e7548cdb105ea4c8548b3106b3b59420"
 
 [metadata.files]
 aiodataloader = [
@@ -314,6 +322,10 @@ attrs = [
 black = [
     {file = "black-21.7b0-py3-none-any.whl", hash = "sha256:1c7aa6ada8ee864db745b22790a32f94b2795c253a75d6d9b5e439ff10d23116"},
     {file = "black-21.7b0.tar.gz", hash = "sha256:c8373c6491de9362e39271630b65b964607bc5c79c83783547d76c839b3aa219"},
+]
+cachetools = [
+    {file = "cachetools-4.2.2-py3-none-any.whl", hash = "sha256:2cc0b89715337ab6dbba85b5b50effe2b0c74e035d83ee8ed637cf52f12ae001"},
+    {file = "cachetools-4.2.2.tar.gz", hash = "sha256:61b5ed1e22a0924aed1d23b478f37e8d52549ff8a961de2909c69bf950020cff"},
 ]
 chess = [
     {file = "chess-1.6.1-py3-none-any.whl", hash = "sha256:7a7e167454f06c2326f25e099b9d8bca2aa6da20a20a2bb55de640552ca445aa"},
