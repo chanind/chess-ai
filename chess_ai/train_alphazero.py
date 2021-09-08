@@ -68,9 +68,11 @@ def train_alphazero(
                 output_pis, output_value = model(inputs.to(device))
                 loss_pi = criterion_pi(
                     F.log_softmax(output_pis.view((batch_size, -1))),
-                    target_pis.view((batch_size, -1)),
+                    target_pis.to(device).view((batch_size, -1)),
                 )
-                loss_value = criterion_value(target_value, output_value.squeeze(-1))
+                loss_value = criterion_value(
+                    target_value.to(device), output_value.squeeze(-1)
+                )
                 loss = loss_pi + loss_value
                 loss.backward()
                 optimizer.step()
