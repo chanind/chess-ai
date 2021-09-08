@@ -111,6 +111,6 @@ if __name__ == "__main__":
         mcts_simulations=args.mcts_simulations,
         games_per_iteration=args.games_per_iteration,
         evaluate_after_batch=args.evaluate_after_batch,
-        stockfish_binary=args.stockfish_finary,
+        stockfish_binary=args.stockfish_binary,
     )
     torch.save(model.state_dict(), args.model_file)
