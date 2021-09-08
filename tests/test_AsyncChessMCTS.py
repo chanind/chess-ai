@@ -7,6 +7,7 @@ from random import random
 
 from chess_ai.AsyncChessMCTS import AsyncChessMCTS
 from chess_ai.translation.Action import Action, ACTION_CHANNELS
+from chess_ai.translation.BoardWrapper import BoardWrapper
 
 
 class MockModel:
@@ -26,7 +27,7 @@ async def test_AsyncChessMCTS_runs():
         AsyncPredictDataLoader(model), "cpu", num_simulations=10, cpuct=1.0
     )
 
-    probs = await mcts.get_action_probabilities(board)
+    probs = await mcts.get_action_probabilities(BoardWrapper(board))
     assert probs.shape == (ACTION_CHANNELS, 8, 8)
     assert np.sum(probs) == pytest.approx(1.0)
     assert np.max(probs) <= 1.0

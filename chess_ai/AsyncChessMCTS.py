@@ -4,15 +4,14 @@ import logging
 import math
 import torch
 import asyncio
-from typing import List, Tuple
-import chess
 import numpy as np
-from functools import lru_cache
-from cachetools import cached, LRUCache
-from cachetools.keys import hashkey
-
-from .translation.InputState import InputState
-from .translation.Action import ACTION_PROBS_SHAPE, Action, unravel_action_index
+from .translation.Action import ACTION_PROBS_SHAPE, unravel_action_index
+from .translation.BoardWrapper import (
+    BoardWrapper,
+    generate_actions_mask_and_coords,
+    get_next_board_wrapper,
+    get_board_input_tensor,
+)
 from .AsyncPredictDataLoader import AsyncPredictDataLoader
 
 EPS = 1e-8
@@ -21,53 +20,6 @@ log = logging.getLogger(__name__)
 
 
 TOTAL_ACTION_INDICES = np.prod(ACTION_PROBS_SHAPE)
-
-
-def hash_board(board: chess.Board) -> int:
-    return hash(
-        (hash(board._transposition_key()), board.fullmove_number, board.halfmove_clock)
-    )
-
-
-@cached(
-    cache=LRUCache(maxsize=100000),
-    key=lambda board_hash, _board, move: hashkey(board_hash, move.uci()),
-)
-def get_next_board(_board_hash: str, board: chess.Board, move: chess.Move):
-    next_board = board.copy()
-    next_board.push(move)
-    return next_board
-
-
-@cached(
-    cache=LRUCache(maxsize=100000),
-    key=lambda board_hash, _board: hashkey(board_hash),
-)
-def get_board_input_tensor(_board_hash: str, board: chess.Board):
-    return InputState(board).to_tensor()
-
-
-@cached(
-    cache=LRUCache(maxsize=100000),
-    key=lambda board_hash, _board: hashkey(board_hash),
-)
-def generate_actions_mask_and_coords(
-    _board_hash: str,
-    board: chess.Board,
-) -> Tuple[np.ndarray, List[Action]]:
-    """
-    return a tuple containing an action mask, and a list of valid actions
-    The mask is a matrix of the size of the action outputs from the model
-    where 1 means the move is valid and 0 means it's invalid
-    """
-    mask = np.zeros(ACTION_PROBS_SHAPE)
-    valid_actions: List[Action] = []
-
-    for move in board.legal_moves:
-        action = Action(move, board.turn)
-        mask[action.coords] = 1
-        valid_actions.append(action)
-    return mask, valid_actions
 
 
 class AsyncChessMCTS:
@@ -102,16 +54,18 @@ class AsyncChessMCTS:
         self.device = device
         self.loader = loader
 
-    async def get_action_probabilities(self, board, temp=1):
+    async def get_action_probabilities(self, board_wrapper, temp=1):
         """
         This function performs num_simulations simulations of MCTS starting from board.
         Returns:
             probs: a policy vector where the probability of the ith action is
                    proportional to Nsa[(s,a)]**(1./temp)
         """
-        await asyncio.gather(*[self.search(board) for _ in range(self.num_simulations)])
+        await asyncio.gather(
+            *[self.search(board_wrapper) for _ in range(self.num_simulations)]
+        )
 
-        state_hash = hash_board(board)
+        state_hash = board_wrapper.hash
         counts = np.zeros(ACTION_PROBS_SHAPE)
         for action_index in range(TOTAL_ACTION_INDICES):
             action_coord = unravel_action_index(action_index)
@@ -131,7 +85,7 @@ class AsyncChessMCTS:
         probs = counts / counts_sum
         return probs
 
-    async def search(self, board: chess.Board):
+    async def search(self, board_wrapper: BoardWrapper):
         """
         This function performs one iteration of MCTS. It is recursively called
         till a leaf node is found. The action chosen at each node is one that
@@ -148,7 +102,8 @@ class AsyncChessMCTS:
             v: the negative of the value of the current board
         """
 
-        state_hash = hash_board(board)
+        state_hash = board_wrapper.hash
+        board = board_wrapper.board
 
         if state_hash not in self.Es:
             self.Es[state_hash] = None
@@ -167,7 +122,7 @@ class AsyncChessMCTS:
         if state_hash not in self.Ps:
             # leaf node
             loadingCoro = self.loader.load(
-                get_board_input_tensor(state_hash, board).unsqueeze(0).to(self.device)
+                get_board_input_tensor(board_wrapper).unsqueeze(0).to(self.device)
             )
             self.loadingCoros[state_hash] = loadingCoro
             action_probs_tensor, value_tensor = await loadingCoro
@@ -179,7 +134,7 @@ class AsyncChessMCTS:
             action_probs = action_probs_tensor[0].detach().cpu().numpy()
             value = value_tensor[0].detach().cpu().numpy()
             valid_actions_mask, valid_actions = generate_actions_mask_and_coords(
-                state_hash, board
+                board_wrapper
             )
             valid_action_probs = action_probs * valid_actions_mask
             self.Ps[state_hash] = valid_action_probs
@@ -225,8 +180,8 @@ class AsyncChessMCTS:
                 best_action = action
 
         # TODO: this might be slow to copy the whole board, try seeing if we can get away with pushing / popping afterwards in the future
-        next_board = get_next_board(state_hash, board, best_action.move)
-        value = await self.search(next_board)
+        next_board_wrapper = get_next_board_wrapper(board_wrapper, best_action.move)
+        value = await self.search(next_board_wrapper)
 
         if (state_hash, best_action.coords) in self.Qsa:
             self.Qsa[(state_hash, best_action.coords)] = (

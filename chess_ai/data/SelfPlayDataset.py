@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from chess_ai.translation.Action import ACTION_PROBS_SHAPE, Action, unravel_action_index
 from chess_ai.translation.InputState import InputState
+from chess_ai.translation.BoardWrapper import BoardWrapper, get_next_board_wrapper
 from chess_ai.ChessModel import ChessModel
 from chess_ai.AsyncChessMCTS import AsyncChessMCTS
 from chess_ai.AsyncPredictDataLoader import AsyncPredictDataLoader
@@ -109,26 +110,25 @@ class SelfPlayDataset(Dataset):
                            the player eventually won the game, else -1.
         """
         train_examples = []
-        board = chess.Board()
+        board_wrapper = BoardWrapper(chess.Board())
         episodeStep = 0
 
         while True:
             episodeStep += 1
             temp = int(episodeStep < self.temp_threshold)
 
-            pi = await mcts.get_action_probabilities(board, temp=temp)
-            train_examples.append((InputState(board), pi, 0))
+            pi = await mcts.get_action_probabilities(board_wrapper, temp=temp)
+            train_examples.append((InputState(board_wrapper.board), pi, 0))
 
             action_index = np.random.choice(pi.size, p=pi.flatten())
             action_coord = unravel_action_index(action_index)
 
-            move = find_move_from_action_coord(action_coord, board)
+            move = find_move_from_action_coord(action_coord, board_wrapper.board)
 
-            board = board.copy()
-            board.push(move)
+            board_wrapper = get_next_board_wrapper(board_wrapper, move)
 
-            if board.is_game_over():
-                outcome = board.outcome()
+            if board_wrapper.board.is_game_over():
+                outcome = board_wrapper.board.outcome()
                 if outcome.winner is None:
                     return train_examples
                 result = 1 if outcome.winner == chess.WHITE else -1
