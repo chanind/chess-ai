@@ -71,7 +71,10 @@ class SelfPlayDataset(Dataset):
     async def generate_single_selfplay_game_data(
         self, loader: AsyncPredictDataLoader, pbar
     ):
-        train_examples = await self.selfplay_game(loader)
+        mcts = AsyncChessMCTS(
+            loader, self.device, self.mcts_simulations
+        )  # reset search tree
+        train_examples = await self.selfplay_game(mcts)
 
         # save the iteration examples to the history
         self.train_examples_history.append(train_examples)
@@ -92,7 +95,7 @@ class SelfPlayDataset(Dataset):
         shuffle(self.current_training_examples)
         pbar.update(n=1)  # increment the progress bar
 
-    async def selfplay_game(self, loader):
+    async def selfplay_game(self, mcts: AsyncChessMCTS):
         """
         This function executes one episode of self-play, starting with player 1.
         As the game is played, each turn is added as a training example to
@@ -113,9 +116,6 @@ class SelfPlayDataset(Dataset):
         while True:
             episodeStep += 1
             temp = int(episodeStep < self.temp_threshold)
-
-            # try resetting mcts tree after each move
-            mcts = AsyncChessMCTS(loader, self.device, self.mcts_simulations)
 
             pi = await mcts.get_action_probabilities(board_wrapper, temp=temp)
             train_examples.append((InputState(board_wrapper.board), pi, 0))
