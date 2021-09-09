@@ -64,31 +64,26 @@ class AsyncChessMCTS:
         await asyncio.gather(
             *[self.search(board_wrapper) for _ in range(self.num_simulations)]
         )
-        with torch.no_grad():
-            state_hash = board_wrapper.hash
-            counts = torch.zeros(ACTION_PROBS_SHAPE)
-            for action_index in range(TOTAL_ACTION_INDICES):
-                action_coord = unravel_action_index(action_index)
-                if (state_hash, action_coord) in self.Nsa:
-                    counts[action_coord] = self.Nsa[(state_hash, action_coord)]
 
-            if temp == 0:
-                counts_numpy = counts.cpu().numpy()
-                # todo: move this to pytorch
-                best_action_indices = np.argwhere(
-                    counts_numpy.flatten() == np.max(counts_numpy)
-                )
-                chosen_action_index = np.random.choice(best_action_indices.flatten())
-                chosen_action_coord = unravel_action_index(chosen_action_index)
-                probs = torch.zeros(ACTION_PROBS_SHAPE)
-                probs[chosen_action_coord] = 1
-                return probs
+        state_hash = board_wrapper.hash
+        counts = np.zeros(ACTION_PROBS_SHAPE)
+        for action_index in range(TOTAL_ACTION_INDICES):
+            action_coord = unravel_action_index(action_index)
+            if (state_hash, action_coord) in self.Nsa:
+                counts[action_coord] = self.Nsa[(state_hash, action_coord)]
 
-            if temp != 1:
-                counts = counts ** (1.0 / temp)
-            counts_sum = counts.sum()
-            probs = counts / counts_sum
+        if temp == 0:
+            best_action_indices = np.argwhere(counts.flatten() == np.max(counts))
+            chosen_action_index = np.random.choice(best_action_indices.flatten())
+            chosen_action_coord = unravel_action_index(chosen_action_index)
+            probs = np.zeros(ACTION_PROBS_SHAPE)
+            probs[chosen_action_coord] = 1
             return probs
+
+        counts **= 1.0 / temp
+        counts_sum = np.sum(counts)
+        probs = counts / counts_sum
+        return probs
 
     async def search(self, board_wrapper: BoardWrapper):
         """
@@ -136,73 +131,69 @@ class AsyncChessMCTS:
             ]  # remove this from loading coros list so we don't block any other loads
 
             # TODO: does it make more sense to keep everything in pytorch tensors?
-            with torch.no_grad():
-                action_probs = action_probs_tensor[0].cpu()
-                value = value_tensor[0].cpu()
-                valid_actions_mask, valid_actions = generate_actions_mask_and_coords(
-                    board_wrapper
-                )
-                valid_action_probs = action_probs * valid_actions_mask
-                self.Ps[state_hash] = valid_action_probs
+            action_probs = action_probs_tensor[0].detach().cpu().numpy()
+            value = value_tensor[0].detach().cpu().numpy()
+            valid_actions_mask, valid_actions = generate_actions_mask_and_coords(
+                board_wrapper
+            )
+            valid_action_probs = action_probs * valid_actions_mask
+            self.Ps[state_hash] = valid_action_probs
 
-                sum_Ps_s = self.Ps[state_hash].sum()
-                if sum_Ps_s > 0:
-                    self.Ps[state_hash] /= sum_Ps_s  # renormalize
-                else:
-                    # if all valid moves were masked make all valid moves equally probable
+            sum_Ps_s = np.sum(self.Ps[state_hash])
+            if sum_Ps_s > 0:
+                self.Ps[state_hash] /= sum_Ps_s  # renormalize
+            else:
+                # if all valid moves were masked make all valid moves equally probable
 
-                    # NB! All valid moves may be masked if either your model architecture is insufficient or you've get overfitting or something else.
-                    # If you have got dozens or hundreds of these messages you should pay attention to your model and/or training process.
-                    log.error("All valid moves were masked, doing a workaround.")
-                    self.Ps[state_hash] = valid_action_probs + valid_actions_mask
-                    self.Ps[state_hash] /= self.Ps[state_hash].sum()
+                # NB! All valid moves may be masked if either your model architecture is insufficient or you've get overfitting or something else.
+                # If you have got dozens or hundreds of these messages you should pay attention to your model and/or training process.
+                log.error("All valid moves were masked, doing a workaround.")
+                self.Ps[state_hash] = valid_action_probs + valid_actions_mask
+                self.Ps[state_hash] /= np.sum(self.Ps[state_hash])
 
-                self.Vs[state_hash] = valid_actions
-                self.Ns[state_hash] = 0
+            self.Vs[state_hash] = valid_actions
+            self.Ns[state_hash] = 0
 
-                return -value
+            return -value
 
-        with torch.no_grad():
-            valid_actions = self.Vs[state_hash]
-            best_action_score = -float("inf")
-            best_action = None
+        valid_actions = self.Vs[state_hash]
+        best_action_score = -float("inf")
+        best_action = None
 
-            # pick the action with the highest upper confidence bound
-            for action in valid_actions:
-                if (state_hash, action.coords) in self.Qsa:
-                    qval = self.Qsa[(state_hash, action.coords)]
-                    action_prob = self.Ps[state_hash][action.coords]
-                    score = qval + self.cpuct * action_prob * math.sqrt(
-                        self.Ns[state_hash]
-                    ) / (1 + self.Nsa[(state_hash, action.coords)])
-                else:
-                    score = (
-                        self.cpuct
-                        * self.Ps[state_hash][action.coords]
-                        * math.sqrt(self.Ns[state_hash] + EPS)
-                    )  # Q = 0 ?
+        # pick the action with the highest upper confidence bound
+        for action in valid_actions:
+            if (state_hash, action.coords) in self.Qsa:
+                qval = self.Qsa[(state_hash, action.coords)]
+                action_prob = self.Ps[state_hash][action.coords]
+                score = qval + self.cpuct * action_prob * math.sqrt(
+                    self.Ns[state_hash]
+                ) / (1 + self.Nsa[(state_hash, action.coords)])
+            else:
+                score = (
+                    self.cpuct
+                    * self.Ps[state_hash][action.coords]
+                    * math.sqrt(self.Ns[state_hash] + EPS)
+                )  # Q = 0 ?
 
-                if score > best_action_score:
-                    best_action_score = score
-                    best_action = action
+            if score > best_action_score:
+                best_action_score = score
+                best_action = action
 
-            # TODO: this might be slow to copy the whole board, try seeing if we can get away with pushing / popping afterwards in the future
-            next_board_wrapper = get_next_board_wrapper(board_wrapper, best_action.move)
-        # it seems like await + torch.no_grad() acts strangely together, keeping them separate
+        # TODO: this might be slow to copy the whole board, try seeing if we can get away with pushing / popping afterwards in the future
+        next_board_wrapper = get_next_board_wrapper(board_wrapper, best_action.move)
         value = await self.search(next_board_wrapper)
 
-        with torch.no_grad():
-            if (state_hash, best_action.coords) in self.Qsa:
-                self.Qsa[(state_hash, best_action.coords)] = (
-                    self.Nsa[(state_hash, best_action.coords)]
-                    * self.Qsa[(state_hash, best_action.coords)]
-                    + value
-                ) / (self.Nsa[(state_hash, best_action.coords)] + 1)
-                self.Nsa[(state_hash, best_action.coords)] += 1
+        if (state_hash, best_action.coords) in self.Qsa:
+            self.Qsa[(state_hash, best_action.coords)] = (
+                self.Nsa[(state_hash, best_action.coords)]
+                * self.Qsa[(state_hash, best_action.coords)]
+                + value
+            ) / (self.Nsa[(state_hash, best_action.coords)] + 1)
+            self.Nsa[(state_hash, best_action.coords)] += 1
 
-            else:
-                self.Qsa[(state_hash, best_action.coords)] = value
-                self.Nsa[(state_hash, best_action.coords)] = 1
+        else:
+            self.Qsa[(state_hash, best_action.coords)] = value
+            self.Nsa[(state_hash, best_action.coords)] = 1
 
-            self.Ns[state_hash] += 1
-            return -value
+        self.Ns[state_hash] += 1
+        return -value

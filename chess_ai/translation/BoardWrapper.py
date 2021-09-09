@@ -1,7 +1,6 @@
 from typing import List, Tuple
 import chess
 import numpy as np
-import torch
 from functools import lru_cache
 from cachetools import cached, LRUCache
 from cachetools.keys import hashkey
@@ -55,7 +54,7 @@ def generate_actions_mask_and_coords(
     where 1 means the move is valid and 0 means it's invalid
     """
     board = board_wrapper.board
-    mask = torch.zeros(ACTION_PROBS_SHAPE)
+    mask = np.zeros(ACTION_PROBS_SHAPE)
     valid_actions: List[Action] = []
 
     for move in board.legal_moves:
