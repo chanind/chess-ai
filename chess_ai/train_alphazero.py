@@ -49,7 +49,6 @@ def train_alphazero(
         loop.run_until_complete(
             selfplay_dataset.generate_self_play_data(model, batch_size=batch_size)
         )
-        loop.close()
 
         train_loader = DataLoader(
             selfplay_dataset,
