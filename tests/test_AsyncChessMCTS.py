@@ -29,9 +29,9 @@ async def test_AsyncChessMCTS_runs():
 
     probs = await mcts.get_action_probabilities(BoardWrapper(board))
     assert probs.shape == (ACTION_CHANNELS, 8, 8)
-    assert np.sum(probs) == pytest.approx(1.0)
-    assert np.max(probs) <= 1.0
-    assert np.min(probs) >= 0.0
+    assert probs.sum() == pytest.approx(1.0)
+    assert probs.max() <= 1.0
+    assert probs.min() >= 0.0
 
     valid_action_coords = [
         Action(move, board.turn).coords for move in board.legal_moves
