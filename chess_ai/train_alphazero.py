@@ -30,6 +30,7 @@ def train_alphazero(
     num_workers: int = 2,
     games_per_iteration: int = 10,
     max_recent_training_games=10000,
+    model_file: str = "chess_alphazero_model.pth",
 ):
     selfplay_dataset = SelfPlayDataset(
         device,
@@ -92,6 +93,8 @@ def train_alphazero(
                 )
                 print(f"model score: {model_score}")
 
+            torch.save(model.state_dict(), model_file)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -115,5 +118,5 @@ if __name__ == "__main__":
         evaluate_after_batch=args.evaluate_after_batch,
         stockfish_binary=args.stockfish_binary,
         max_recent_training_games=args.max_recent_training_games,
+        model_file=args.model_file,
     )
-    torch.save(model.state_dict(), args.model_file)

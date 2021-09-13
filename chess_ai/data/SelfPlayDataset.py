@@ -20,13 +20,19 @@ from chess_ai.AsyncPredictDataLoader import AsyncPredictDataLoader
 log = logging.getLogger(__name__)
 
 
+class InvalidMoveException(Exception):
+    pass
+
+
 def find_move_from_action_coord(
     action_coord: np.ndarray, board: chess.Board
 ) -> chess.Move:
     for move in board.legal_moves:
         if Action(move, board.turn).coords == action_coord:
             return move
-    raise Exception(f"No legal move found for action coord: {action_coord}")
+    raise InvalidMoveException(
+        f"No legal move found for action coord: {action_coord} and fen: {board.fen()}"
+    )
 
 
 class SelfPlayDataset(Dataset):
@@ -74,24 +80,27 @@ class SelfPlayDataset(Dataset):
         mcts = AsyncChessMCTS(
             loader, self.device, self.mcts_simulations
         )  # reset search tree
-        train_examples = await self.selfplay_game(mcts)
+        try:
+            train_examples = await self.selfplay_game(mcts)
 
-        # save the iteration examples to the history
-        self.train_examples_history.append(train_examples)
+            # save the iteration examples to the history
+            self.train_examples_history.append(train_examples)
 
-        if len(self.train_examples_history) > self.max_recent_training_games:
-            log.warning(
-                f"Removing the oldest entry in train_examples_history. len(train_examples_history) = {len(self.train_examples_history)}"
-            )
-            self.train_examples_history.pop(0)
-        # backup history to a file
-        # NB! the examples were collected using the model from the previous iteration, so (i-1)
-        # self.saveTrainExamples(i - 1)
+            if len(self.train_examples_history) > self.max_recent_training_games:
+                log.warning(
+                    f"Removing the oldest entry in train_examples_history. len(train_examples_history) = {len(self.train_examples_history)}"
+                )
+                self.train_examples_history.pop(0)
+            # backup history to a file
+            # NB! the examples were collected using the model from the previous iteration, so (i-1)
+            # self.saveTrainExamples(i - 1)
 
-        # shuffle examples before training
-        self.current_training_examples = []
-        for e in self.train_examples_history:
-            self.current_training_examples.extend(e)
+            # shuffle examples before training
+            self.current_training_examples = []
+            for e in self.train_examples_history:
+                self.current_training_examples.extend(e)
+        except InvalidMoveException as err:
+            log.warning(f"skipping game due to invalid move error: {err}")
         shuffle(self.current_training_examples)
         pbar.update(n=1)  # increment the progress bar
 
