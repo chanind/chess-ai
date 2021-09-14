@@ -51,7 +51,6 @@ class ChessModel(nn.Module):
         )
         self.value_out = nn.Sequential(
             nn.Linear(8 * 8 * hidden_channels, hidden_channels),
-            nn.BatchNorm1d(hidden_channels),
             nn.ReLU(inplace=True),
             nn.Dropout(p=0.2),
             nn.Linear(hidden_channels, 1),
