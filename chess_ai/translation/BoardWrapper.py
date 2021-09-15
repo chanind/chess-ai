@@ -19,7 +19,7 @@ class BoardWrapper:
     @property
     def hash(self):
         if self._hash is None:
-            self._hash = hash(self.board.fen())
+            self._hash = hash(tuple(self.board.move_stack))
         return self._hash
 
     def __hash__(self):
