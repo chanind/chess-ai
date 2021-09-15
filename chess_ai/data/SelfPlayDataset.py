@@ -8,7 +8,11 @@ import logging
 import asyncio
 from tqdm import tqdm
 
-from chess_ai.translation.Action import ACTION_PROBS_SHAPE, Action, unravel_action_index
+from chess_ai.translation.find_move_from_action_coord import (
+    InvalidMoveException,
+    find_move_from_action_coord,
+)
+from chess_ai.translation.Action import unravel_action_index
 from chess_ai.translation.InputState import InputState
 from chess_ai.translation.BoardWrapper import BoardWrapper, get_next_board_wrapper
 from chess_ai.ChessModel import ChessModel
@@ -18,21 +22,6 @@ from chess_ai.AsyncPredictDataLoader import AsyncPredictDataLoader
 # based on https://github.com/suragnair/alpha-zero-general/blob/master/Coach.py
 
 log = logging.getLogger(__name__)
-
-
-class InvalidMoveException(Exception):
-    pass
-
-
-def find_move_from_action_coord(
-    action_coord: np.ndarray, board: chess.Board
-) -> chess.Move:
-    for move in board.legal_moves:
-        if Action(move, board.turn).coords == action_coord:
-            return move
-    raise InvalidMoveException(
-        f"No legal move found for action coord: {action_coord} and fen: {board.fen()}"
-    )
 
 
 class SelfPlayDataset(Dataset):

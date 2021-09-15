@@ -2,26 +2,30 @@ import torch
 import chess
 import chess.engine
 import collections
+import asyncio
+import argparse
 
 from .play_vs_stockfish import play_vs_stockfish
 from .ChessModel import ChessModel
-from .chess_players import ChessPlayer, MinmaxPlayer, StockfishPlayer, AlphaChess
+from .chess_players import ChessPlayer, MinmaxPlayer, StockfishPlayer, AlphaZeroPlayer
 
-def one_game(player1: ChessPlayer, player2: ChessPlayer) -> int:
+
+async def one_game(player1: ChessPlayer, player2: ChessPlayer) -> int:
     board = chess.Board()
     while not board.is_game_over():
         if board.turn:
-            move = player1.make_move(board)
+            move = await player1.make_move(board)
         else:
-            move = player2.make_move(board)
+            move = await player2.make_move(board)
         board.push(move)
-    outcome = board.outcome()      
+    outcome = board.outcome()
     if outcome.winner is None:
         return 0
     else:
         return 1 if outcome.winner == chess.WHITE else -1
 
-def play_against_others(player: ChessPlayer):
+
+async def play_against_others(player: ChessPlayer):
 
     adversaries = [
         (MinmaxPlayer(1), 1),
@@ -36,30 +40,30 @@ def play_against_others(player: ChessPlayer):
 
     for adversary, n in adversaries:
         result_map = {
-        chess.WHITE: {1: "wins", 0: "stales", -1: "defeats"},
-        chess.BLACK: {-1: "wins", 0: "stales", 1: "defeats"}
+            chess.WHITE: {1: "wins", 0: "stales", -1: "defeats"},
+            chess.BLACK: {-1: "wins", 0: "stales", 1: "defeats"},
         }
         for color in [chess.WHITE, chess.BLACK]:
             results = collections.defaultdict(int)
             for i in range(n):
                 if color:
-                    r = one_game(player, adversary)
+                    r = await one_game(player, adversary)
                 else:
-                    r = one_game(adversary, player)
+                    r = await one_game(adversary, player)
                 results[result_map[color][r]] += 1
-            print("Played {} times with color {} against {}, for a total of:".format(
-                n, "white" if color else "black", adversary
-            ))
+            print(
+                "Played {} times with color {} against {}, for a total of:".format(
+                    n, "white" if color else "black", adversary
+                )
+            )
             for k, v in results.items():
-                print("{} {}, ".format(v, k), end = " ")
+                print("{} {}, ".format(v, k), end=" ")
             print("")
             print("+++++++++++++++++++++++++++++++++++++++++++")
         adversary.quit()
-    
-                
-            
 
-def estimate_model_level(
+
+async def estimate_model_level(
     model: ChessModel,
     device: torch.device,
     rounds_per_level: int = 10,
@@ -74,7 +78,7 @@ def estimate_model_level(
         for _ in range(rounds_per_level):
             score = 0
             for color in [chess.WHITE, chess.BLACK]:
-                result = play_vs_stockfish(
+                result = await play_vs_stockfish(
                     model,
                     device,
                     color,
@@ -97,11 +101,11 @@ def estimate_model_level(
 
 
 if __name__ == "__main__":
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model-file", default="chess_alphazero_model.pth")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = ChessModel()
-    model.load_state_dict(
-        torch.load("chess.pth", map_location=torch.device(device))
-    )
-    player = AlphaChess(model, device)
-    play_against_others(player)
+    model.load_state_dict(torch.load("chess.pth", map_location=torch.device(device)))
+    player = AlphaZeroPlayer(model, device)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(play_against_others(player))
