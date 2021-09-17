@@ -12,10 +12,10 @@ from .data.SelfPlayDataset import SelfPlayDataset
 from .estimate_model_level import estimate_model_level
 
 
-def criterion_pi(output_log_probs, target_pis):
-    return -torch.sum(target_pis * output_log_probs) / target_pis.shape[0]
+# def criterion_pi(output_log_probs, target_pis):
+#     return -torch.sum(target_pis * output_log_probs) / target_pis.shape[0]
 
-
+criterion_pi = nn.CrossEntropyLoss()
 criterion_value = nn.MSELoss()
 
 
@@ -67,8 +67,12 @@ def train_alphazero(
                 optimizer.zero_grad()
                 output_pis, output_value = model(inputs.to(device))
                 loss_pi = criterion_pi(
-                    F.log_softmax(output_pis.view((batch_size, -1))),
-                    target_pis.to(device).view((batch_size, -1)),
+                    # F.log_softmax(output_pis.view((batch_size, -1))),
+                    # target_pis.to(device).view((batch_size, -1)),
+                    output_pis.view((batch_size, -1)),
+                    # this is hacky, the target shouldn't be one-hot, so this is undoing the one hot encoding
+                    # we should just directly output the one-hot pos in the dataloader rather than doing this
+                    target_pis.to(device).view((batch_size, -1)).max(dim=1)[1],
                 )
                 loss_value = criterion_value(
                     target_value.to(device), output_value.squeeze(-1)
@@ -104,11 +108,16 @@ if __name__ == "__main__":
     parser.add_argument("--mcts-simulations", type=int, default=15)
     parser.add_argument("--max-recent-training-games", type=int, default=1000)
     parser.add_argument("--evaluate-after-batch", action="store_true")
+    parser.add_argument("--load-model-from-file", action="store_true")
     parser.add_argument("--stockfish-binary", default=None)
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = ChessModel()
+    if args.load_model_from_file:
+        model.load_state_dict(
+            torch.load(args.model_file, map_location=torch.device(device))
+        )
     train_alphazero(
         device,
         model,

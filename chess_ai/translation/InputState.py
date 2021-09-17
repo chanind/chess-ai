@@ -46,8 +46,6 @@ class InputState(object):
     move_number_scaled: float
 
     def __init__(self, board: chess.Board):
-        assert board.is_valid()
-
         pieces_state_linear = np.zeros(64, np.uint8)
         is_white = board.turn == chess.WHITE
         for i in range(64):

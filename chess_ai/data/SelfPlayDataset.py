@@ -62,6 +62,7 @@ class SelfPlayDataset(Dataset):
                 for _ in range(self.games_per_iteration)
             ]
         )
+        return self.current_training_examples
 
     async def generate_single_selfplay_game_data(
         self, loader: AsyncPredictDataLoader, pbar
@@ -142,7 +143,6 @@ class SelfPlayDataset(Dataset):
                             result * ((-1) ** (state.turn == chess.BLACK)),
                         )
                     )
-
                 return adjusted_train_examples
 
     def __len__(self):
