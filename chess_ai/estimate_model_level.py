@@ -25,17 +25,20 @@ async def one_game(player1: ChessPlayer, player2: ChessPlayer) -> int:
         return 1 if outcome.winner == chess.WHITE else -1
 
 
-async def play_against_others(player: ChessPlayer):
+async def play_against_others(
+    player: ChessPlayer,
+    stockfish_binary,
+):
 
     adversaries = [
         (MinmaxPlayer(1), 1),
         (MinmaxPlayer(2), 1),
         (MinmaxPlayer(3), 1),
         (MinmaxPlayer(4), 1),
-        (StockfishPlayer("stockfish", 0), 5),
-        (StockfishPlayer("stockfish", 1), 5),
-        (StockfishPlayer("stockfish", 2), 5),
-        (StockfishPlayer("stockfish", 3), 5),
+        (StockfishPlayer(stockfish_binary, 0), 5),
+        (StockfishPlayer(stockfish_binary, 1), 5),
+        (StockfishPlayer(stockfish_binary, 2), 5),
+        (StockfishPlayer(stockfish_binary, 3), 5),
     ]
 
     for adversary, n in adversaries:
@@ -103,6 +106,7 @@ async def estimate_model_level(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-file", default="chess_alphazero_model.pth")
+    parser.add_argument("--stockfish-binary", default="stockfish")
     args = parser.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = ChessModel()
@@ -111,4 +115,4 @@ if __name__ == "__main__":
     )
     player = AlphaZeroPlayer(model, device)
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(play_against_others(player))
+    loop.run_until_complete(play_against_others(player, args.stockfish_binary))
