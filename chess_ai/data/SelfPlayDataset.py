@@ -77,9 +77,9 @@ class SelfPlayDataset(Dataset):
             self.train_examples_history.append(train_examples)
 
             if len(self.train_examples_history) > self.max_recent_training_games:
-                log.warning(
-                    f"Removing the oldest entry in train_examples_history. len(train_examples_history) = {len(self.train_examples_history)}"
-                )
+                # log.warning(
+                #     f"Removing the oldest entry in train_examples_history. len(train_examples_history) = {len(self.train_examples_history)}"
+                # )
                 self.train_examples_history.pop(0)
             # backup history to a file
             # NB! the examples were collected using the model from the previous iteration, so (i-1)
