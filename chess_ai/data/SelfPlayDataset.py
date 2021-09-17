@@ -55,7 +55,7 @@ class SelfPlayDataset(Dataset):
         """
 
         loader = AsyncPredictDataLoader(model, max_batch_size=batch_size)
-        pbar = tqdm(total=self.games_per_iteration, unit="game")
+        pbar = tqdm(total=self.games_per_iteration, unit="game", position=0, leave=True)
         await asyncio.gather(
             *[
                 self.generate_single_selfplay_game_data(loader, pbar)

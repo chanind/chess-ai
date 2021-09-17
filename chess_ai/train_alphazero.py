@@ -61,6 +61,8 @@ def train_alphazero(
         with tqdm(
             total=len(selfplay_dataset),
             desc=f"Epoch {epoch + 1}",
+            position=0,
+            leave=True,
         ) as pbar:
             for (inputs, target_pis, target_value) in train_loader:
                 batch_size = inputs.shape[0]
