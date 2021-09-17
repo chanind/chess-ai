@@ -103,9 +103,12 @@ async def estimate_model_level(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-file", default="chess_alphazero_model.pth")
+    args = parser.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = ChessModel()
-    model.load_state_dict(torch.load("chess.pth", map_location=torch.device(device)))
+    model.load_state_dict(
+        torch.load(args.model_file, map_location=torch.device(device))
+    )
     player = AlphaZeroPlayer(model, device)
     loop = asyncio.get_event_loop()
     loop.run_until_complete(play_against_others(player))
