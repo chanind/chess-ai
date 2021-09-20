@@ -1,9 +1,11 @@
 # modified from https://github.com/suragnair/alpha-zero-general
 
-import logging
+from dataclasses import dataclass
+
+# import logging
 import math
 import torch
-import asyncio
+from thespian.actors import ActorSystem
 import numpy as np
 from .translation.Action import ACTION_PROBS_SHAPE, unravel_action_index
 from .translation.BoardWrapper import (
@@ -12,29 +14,29 @@ from .translation.BoardWrapper import (
     get_next_board_wrapper,
     get_board_input_tensor,
 )
-from .AsyncPredictDataLoader import AsyncPredictDataLoader
+from .ModelPredictActor import ModelPredictActor, PredictMessage
 
 EPS = 1e-8
 
-log = logging.getLogger(__name__)
+# log = logging.getLogger(__name__)
 
 
 TOTAL_ACTION_INDICES = np.prod(ACTION_PROBS_SHAPE)
 
 
-class AsyncChessMCTS:
+class ChessMCTS:
     """
     Monte Carlo Tree Search for Chess
     """
 
-    loader: AsyncPredictDataLoader
+    loader: ModelPredictActor
 
     num_simulations: int
     cpuct: float
 
     def __init__(
         self,
-        loader: AsyncPredictDataLoader,
+        loader: ModelPredictActor,
         device: torch.device,
         num_simulations: int = 50,
         cpuct: float = 1.0,
@@ -47,23 +49,20 @@ class AsyncChessMCTS:
         self.Es = {}  # stores game.getGameEnded ended for board s
         self.Vs = {}  # stores game.getValidMoves for board s
 
-        self.loadingCoros = {}  # Currently loading Ps values, can await this to block
-
         self.num_simulations = num_simulations
         self.cpuct = cpuct
         self.device = device
         self.loader = loader
 
-    async def get_action_probabilities(self, board_wrapper, temp=1):
+    def get_action_probabilities(self, board_wrapper, temp=1):
         """
         This function performs num_simulations simulations of MCTS starting from board.
         Returns:
             probs: a policy vector where the probability of the ith action is
                    proportional to Nsa[(s,a)]**(1./temp)
         """
-        await asyncio.gather(
-            *[self.search(board_wrapper) for _ in range(self.num_simulations)]
-        )
+        for _ in range(self.num_simulations):
+            self.search(board_wrapper)
 
         state_hash = board_wrapper.hash
         counts = np.zeros(ACTION_PROBS_SHAPE)
@@ -85,7 +84,7 @@ class AsyncChessMCTS:
         probs = counts / counts_sum
         return probs
 
-    async def search(self, board_wrapper: BoardWrapper):
+    def search(self, board_wrapper: BoardWrapper):
         """
         This function performs one iteration of MCTS. It is recursively called
         till a leaf node is found. The action chosen at each node is one that
@@ -117,18 +116,17 @@ class AsyncChessMCTS:
             # terminal node
             return -self.Es[state_hash]
 
-        if state_hash in self.loadingCoros:
-            await self.loadingCoros[state_hash]
         if state_hash not in self.Ps:
             # leaf node
-            loadingCoro = self.loader.load(
+            input_tensor = (
                 get_board_input_tensor(board_wrapper).unsqueeze(0).to(self.device)
             )
-            self.loadingCoros[state_hash] = loadingCoro
-            action_probs_tensor, value_tensor = await loadingCoro
-            del self.loadingCoros[
-                state_hash
-            ]  # remove this from loading coros list so we don't block any other loads
+            print("ASKING:", self.loader)
+            res = ActorSystem().ask(
+                self.loader,
+                PredictMessage(input=input_tensor),
+            )
+            action_probs_tensor, value_tensor = res
 
             # TODO: does it make more sense to keep everything in pytorch tensors?
             action_probs = action_probs_tensor[0].detach().cpu().numpy()
@@ -147,7 +145,7 @@ class AsyncChessMCTS:
 
                 # NB! All valid moves may be masked if either your model architecture is insufficient or you've get overfitting or something else.
                 # If you have got dozens or hundreds of these messages you should pay attention to your model and/or training process.
-                log.error("All valid moves were masked, doing a workaround.")
+                print("All valid moves were masked, doing a workaround.")
                 self.Ps[state_hash] = valid_action_probs + valid_actions_mask
                 self.Ps[state_hash] /= np.sum(self.Ps[state_hash])
 
@@ -181,7 +179,7 @@ class AsyncChessMCTS:
 
         # TODO: this might be slow to copy the whole board, try seeing if we can get away with pushing / popping afterwards in the future
         next_board_wrapper = get_next_board_wrapper(board_wrapper, best_action.move)
-        value = await self.search(next_board_wrapper)
+        value = self.search(next_board_wrapper)
 
         if (state_hash, best_action.coords) in self.Qsa:
             self.Qsa[(state_hash, best_action.coords)] = (

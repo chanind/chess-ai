@@ -248,6 +248,14 @@ optional = false
 python-versions = "*"
 
 [[package]]
+name = "thespian"
+version = "3.10.5"
+description = "Python Actor concurrency library"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "tomli"
 version = "1.2.1"
 description = "A lil' TOML parser"
@@ -301,7 +309,7 @@ python-versions = "*"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "1e2220e0fd762971ff3e07028ea3ff37e7548cdb105ea4c8548b3106b3b59420"
+content-hash = "f3d255e7f9ef89d8d87e7e92e91a08633ff07c53144737850364e59d6d86ff9e"
 
 [metadata.files]
 aiodataloader = [
@@ -455,6 +463,9 @@ regex = [
     {file = "regex-2021.8.3-cp39-cp39-win32.whl", hash = "sha256:f35567470ee6dbfb946f069ed5f5615b40edcbb5f1e6e1d3d2b114468d505fc6"},
     {file = "regex-2021.8.3-cp39-cp39-win_amd64.whl", hash = "sha256:bfa6a679410b394600eafd16336b2ce8de43e9b13f7fb9247d84ef5ad2b45e91"},
     {file = "regex-2021.8.3.tar.gz", hash = "sha256:8935937dad2c9b369c3d932b0edbc52a62647c2afb2fafc0c280f14a8bf56a6a"},
+]
+thespian = [
+    {file = "thespian-3.10.5.zip", hash = "sha256:17adad8afbc4779a01f34a6595c63fceccfd21f10556b85a261338eb99b5d306"},
 ]
 tomli = [
     {file = "tomli-1.2.1-py3-none-any.whl", hash = "sha256:8dd0e9524d6f386271a36b41dbf6c57d8e32fd96fd22b6584679dc569d20899f"},

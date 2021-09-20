@@ -1,14 +1,11 @@
-from chess_ai.AsyncPredictDataLoader import AsyncPredictDataLoader
+from thespian.actors import ActorSystem
+from chess_ai.ModelPredictActor import InitModelPredictActorMessage, ModelPredictActor
 import chess
-import torch
-import torch.nn as nn
 import numpy as np
 
-from .translation.InputState import InputState
 from .translation.BoardWrapper import BoardWrapper
 from .translation.Action import ACTION_PROBS_SHAPE
-from .ChessModel import ChessModel
-from .AsyncChessMCTS import AsyncChessMCTS
+from .ChessMCTS import ChessMCTS
 from .translation.model_output_to_chess_move import model_output_to_chess_move
 from .translation.find_move_from_action_coord import find_move_from_action_coord
 
@@ -17,7 +14,7 @@ class ChessPlayer:
     def __init__(self):
         pass
 
-    async def make_move(self, board: chess.Board) -> chess.Move:
+    def make_move(self, board: chess.Board) -> chess.Move:
         pass
 
     def __str__(self):
@@ -34,7 +31,7 @@ class StockfishPlayer(ChessPlayer):
         self.engine.configure({"Skill Level": self.kill_level})
         self.move_timeout = move_timeout
 
-    async def make_move(self, board: chess.Board) -> chess.Move:
+    def make_move(self, board: chess.Board) -> chess.Move:
         result = self.engine.play(board, chess.engine.Limit(time=self.move_timeout))
         return result.move
 
@@ -124,7 +121,7 @@ class MinmaxPlayer(ChessPlayer):
                 board.pop()
             return best, next_move
 
-    async def make_move(self, board) -> chess.Move:
+    def make_move(self, board) -> chess.Move:
         self.this_turn = board.turn
         self.score_map = self.get_score_map()
         score, move = self.minmax_search(board, self.depth)
@@ -137,16 +134,18 @@ class MinmaxPlayer(ChessPlayer):
 class AlphaZeroPlayer(ChessPlayer):
     def __init__(self, model, device, descr=None, num_simulations=50):
         self.model = model.to(device)
-        self.mcts = AsyncChessMCTS(
-            AsyncPredictDataLoader(model),
+        loader = ActorSystem().createActor(ModelPredictActor)
+        ActorSystem().tell(loader, InitModelPredictActorMessage(model=model))
+        self.mcts = ChessMCTS(
+            loader,
             device,
             num_simulations=num_simulations,
             cpuct=1,
         )
         self.descr = descr
 
-    async def make_move(self, board):
-        pi = await self.mcts.get_action_probabilities(BoardWrapper(board), temp=0)
+    def make_move(self, board):
+        pi = self.mcts.get_action_probabilities(BoardWrapper(board), temp=0)
 
         action_index = np.random.choice(pi.size, p=pi.flatten())
         action_coord = np.unravel_index(action_index, ACTION_PROBS_SHAPE)

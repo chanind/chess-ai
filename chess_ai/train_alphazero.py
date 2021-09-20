@@ -3,13 +3,16 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch import optim
 from tqdm import tqdm
-import asyncio
-import torch.nn.functional as F
+from thespian.actors import ActorSystem
 import argparse
 
 from .ChessModel import ChessModel
 from .data.SelfPlayDataset import SelfPlayDataset
 from .estimate_model_level import estimate_model_level
+from .logcfg import logcfg
+
+
+ActorSystem("multiprocQueueBase", logDefs=logcfg)
 
 
 # def criterion_pi(output_log_probs, target_pis):
@@ -46,10 +49,7 @@ def train_alphazero(
         train_loss = 0
         num_train_batches = 0
         model.eval()
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(
-            selfplay_dataset.generate_self_play_data(model, batch_size=batch_size)
-        )
+        selfplay_dataset.generate_self_play_data(model)
 
         train_loader = DataLoader(
             selfplay_dataset,
@@ -61,8 +61,6 @@ def train_alphazero(
         with tqdm(
             total=len(selfplay_dataset),
             desc=f"Epoch {epoch + 1}",
-            position=0,
-            leave=True,
         ) as pbar:
             for (inputs, target_pis, target_value) in train_loader:
                 batch_size = inputs.shape[0]

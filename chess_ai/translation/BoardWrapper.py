@@ -30,7 +30,7 @@ class BoardWrapper:
 
 
 @cached(
-    cache=LRUCache(maxsize=100000),
+    cache=LRUCache(maxsize=10000),
     key=lambda board_wrapper, move: hashkey(board_wrapper.hash, move.uci()),
 )
 def get_next_board_wrapper(board_wrapper: BoardWrapper, move: chess.Move):
@@ -39,12 +39,12 @@ def get_next_board_wrapper(board_wrapper: BoardWrapper, move: chess.Move):
     return BoardWrapper(next_board)
 
 
-@lru_cache(maxsize=100000)
+@lru_cache(maxsize=10000)
 def get_board_input_tensor(board_wrapper: BoardWrapper):
     return InputState(board_wrapper.board).to_tensor()
 
 
-@lru_cache(maxsize=100000)
+@lru_cache(maxsize=10000)
 def generate_actions_mask_and_coords(
     board_wrapper: BoardWrapper,
 ) -> Tuple[np.ndarray, List[Action]]:

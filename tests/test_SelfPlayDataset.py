@@ -1,8 +1,6 @@
-import pytest
 from chess_ai.translation.Action import ACTION_CHANNELS
 import torch
 from random import random
-import numpy as np
 
 from chess_ai.data.SelfPlayDataset import SelfPlayDataset
 
@@ -15,10 +13,9 @@ class MockModel:
         )
 
 
-@pytest.mark.asyncio
-async def test_SelfPlayDataset_inputs_and_outputs():
+def test_SelfPlayDataset_inputs_and_outputs():
     dataset = SelfPlayDataset("cpu", mcts_simulations=2, games_per_iteration=3)
     # just return random scores
     model = MockModel()
-    await dataset.generate_self_play_data(model)
+    dataset.generate_self_play_data(model)
     assert len(dataset.train_examples_history) == 3

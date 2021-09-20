@@ -2,7 +2,6 @@ import torch
 import chess
 import chess.engine
 import collections
-import asyncio
 import argparse
 
 from .play_vs_stockfish import play_vs_stockfish
@@ -10,13 +9,13 @@ from .ChessModel import ChessModel
 from .chess_players import ChessPlayer, MinmaxPlayer, StockfishPlayer, AlphaZeroPlayer
 
 
-async def one_game(player1: ChessPlayer, player2: ChessPlayer) -> int:
+def one_game(player1: ChessPlayer, player2: ChessPlayer) -> int:
     board = chess.Board()
     while not board.is_game_over():
         if board.turn:
-            move = await player1.make_move(board)
+            move = player1.make_move(board)
         else:
-            move = await player2.make_move(board)
+            move = player2.make_move(board)
         board.push(move)
     outcome = board.outcome()
     if outcome.winner is None:
@@ -25,7 +24,7 @@ async def one_game(player1: ChessPlayer, player2: ChessPlayer) -> int:
         return 1 if outcome.winner == chess.WHITE else -1
 
 
-async def play_against_others(
+def play_against_others(
     player: ChessPlayer,
     stockfish_binary,
 ):
@@ -50,9 +49,9 @@ async def play_against_others(
             results = collections.defaultdict(int)
             for i in range(n):
                 if color:
-                    r = await one_game(player, adversary)
+                    r = one_game(player, adversary)
                 else:
-                    r = await one_game(adversary, player)
+                    r = one_game(adversary, player)
                 results[result_map[color][r]] += 1
             print(
                 "Played {} times with color {} against {}, for a total of:".format(
@@ -66,7 +65,7 @@ async def play_against_others(
         adversary.quit()
 
 
-async def estimate_model_level(
+def estimate_model_level(
     model: ChessModel,
     device: torch.device,
     rounds_per_level: int = 10,
@@ -81,7 +80,7 @@ async def estimate_model_level(
         for _ in range(rounds_per_level):
             score = 0
             for color in [chess.WHITE, chess.BLACK]:
-                result = await play_vs_stockfish(
+                result = play_vs_stockfish(
                     model,
                     device,
                     color,
@@ -114,5 +113,4 @@ if __name__ == "__main__":
         torch.load(args.model_file, map_location=torch.device(device))
     )
     player = AlphaZeroPlayer(model, device)
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(play_against_others(player, args.stockfish_binary))
+    play_against_others(player, args.stockfish_binary)
