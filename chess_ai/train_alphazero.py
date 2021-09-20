@@ -64,7 +64,7 @@ def train_alphazero(
             position=0,
             leave=True,
         ) as pbar:
-            for (inputs, target_pis, target_value) in train_loader:
+            for (inputs, target_indices, target_value) in train_loader:
                 batch_size = inputs.shape[0]
                 optimizer.zero_grad()
                 output_pis, output_value = model(inputs.to(device))
@@ -74,7 +74,7 @@ def train_alphazero(
                     output_pis.view((batch_size, -1)),
                     # this is hacky, the target shouldn't be one-hot, so this is undoing the one hot encoding
                     # we should just directly output the one-hot pos in the dataloader rather than doing this
-                    target_pis.to(device).view((batch_size, -1)).max(dim=1)[1],
+                    target_indices.to(device),
                 )
                 loss_value = criterion_value(
                     target_value.to(device), output_value.squeeze(-1)

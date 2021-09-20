@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 class SelfPlayDataset(Dataset):
 
-    current_training_examples: Tuple[InputState, np.ndarray, int]
+    current_training_examples: Tuple[InputState, int, int]
 
     def __init__(
         self,
@@ -62,6 +62,7 @@ class SelfPlayDataset(Dataset):
                 for _ in range(self.games_per_iteration)
             ]
         )
+        pbar.close()
         return self.current_training_examples
 
     async def generate_single_selfplay_game_data(
@@ -117,10 +118,10 @@ class SelfPlayDataset(Dataset):
             temp = int(episodeStep < self.temp_threshold)
 
             pi = await mcts.get_action_probabilities(board_wrapper, temp=temp)
-            train_examples.append((InputState(board_wrapper.board), pi, 0))
 
             action_index = np.random.choice(pi.size, p=pi.flatten())
             action_coord = unravel_action_index(action_index)
+            train_examples.append((InputState(board_wrapper.board), action_index, 0))
 
             move = find_move_from_action_coord(action_coord, board_wrapper.board)
 
@@ -139,7 +140,7 @@ class SelfPlayDataset(Dataset):
                     adjusted_train_examples.append(
                         (
                             state,
-                            pi,
+                            action_index,
                             result * ((-1) ** (state.turn == chess.BLACK)),
                         )
                     )
@@ -152,6 +153,6 @@ class SelfPlayDataset(Dataset):
         input_state, pi, outcome = self.current_training_examples[idx]
         return (
             input_state.to_tensor(),
-            torch.from_numpy(pi),
+            torch.tensor(pi),
             torch.tensor(outcome, dtype=torch.float),
         )
