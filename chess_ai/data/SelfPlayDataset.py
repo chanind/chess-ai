@@ -3,6 +3,7 @@ from typing import Tuple
 from torch.utils.data import Dataset
 import numpy as np
 import chess
+import chess.pgn
 import torch
 import logging
 import asyncio
@@ -56,14 +57,14 @@ class SelfPlayDataset(Dataset):
 
         loader = AsyncPredictDataLoader(model, max_batch_size=batch_size)
         pbar = tqdm(total=self.games_per_iteration, unit="game", position=0, leave=True)
-        await asyncio.gather(
+        pgn_games = await asyncio.gather(
             *[
                 self.generate_single_selfplay_game_data(loader, pbar)
                 for _ in range(self.games_per_iteration)
             ]
         )
         pbar.close()
-        return self.current_training_examples
+        return pgn_games
 
     async def generate_single_selfplay_game_data(
         self, loader: AsyncPredictDataLoader, pbar
@@ -72,7 +73,7 @@ class SelfPlayDataset(Dataset):
             loader, self.device, self.mcts_simulations
         )  # reset search tree
         try:
-            train_examples = await self.selfplay_game(mcts)
+            train_examples, pgn = await self.selfplay_game(mcts)
 
             # save the iteration examples to the history
             self.train_examples_history.append(train_examples)
@@ -94,6 +95,7 @@ class SelfPlayDataset(Dataset):
             log.warning(f"skipping game due to invalid move error: {err}")
         shuffle(self.current_training_examples)
         pbar.update(n=1)  # increment the progress bar
+        return pgn
 
     async def selfplay_game(self, mcts: AsyncChessMCTS):
         """
@@ -113,6 +115,9 @@ class SelfPlayDataset(Dataset):
         board_wrapper = BoardWrapper(chess.Board())
         episodeStep = 0
 
+        game = chess.pgn.Game()
+        node = game
+
         while True:
             episodeStep += 1
             temp = int(episodeStep < self.temp_threshold)
@@ -126,11 +131,13 @@ class SelfPlayDataset(Dataset):
             move = find_move_from_action_coord(action_coord, board_wrapper.board)
 
             board_wrapper = get_next_board_wrapper(board_wrapper, move)
+            node = node.add_variation(move)
 
             if board_wrapper.board.is_game_over():
+                game.headers["Result"] = board_wrapper.board.result()
                 outcome = board_wrapper.board.outcome()
                 if outcome.winner is None:
-                    return train_examples
+                    return train_examples, game
                 result = 1 if outcome.winner == chess.WHITE else -1
 
                 adjusted_train_examples = []
@@ -144,7 +151,8 @@ class SelfPlayDataset(Dataset):
                             result * ((-1) ** (state.turn == chess.BLACK)),
                         )
                     )
-                return adjusted_train_examples
+
+                return adjusted_train_examples, game
 
     def __len__(self):
         return len(self.current_training_examples)

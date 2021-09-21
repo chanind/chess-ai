@@ -1,3 +1,4 @@
+from typing import Optional
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -6,6 +7,7 @@ from tqdm import tqdm
 import asyncio
 import torch.nn.functional as F
 import argparse
+from pathlib import Path
 
 from .ChessModel import ChessModel
 from .data.SelfPlayDataset import SelfPlayDataset
@@ -31,6 +33,7 @@ def train_alphazero(
     games_per_iteration: int = 10,
     max_recent_training_games=10000,
     model_file: str = "chess_alphazero_model.pth",
+    games_dir: Optional[str] = None,
 ):
     selfplay_dataset = SelfPlayDataset(
         device,
@@ -47,9 +50,15 @@ def train_alphazero(
         num_train_batches = 0
         model.eval()
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(
+        pgn_games = loop.run_until_complete(
             selfplay_dataset.generate_self_play_data(model, batch_size=batch_size)
         )
+
+        if games_dir:
+            out_filename = f"epoch_{epoch}_games.pgn"
+            with open(Path(games_dir) / out_filename, "w") as games_file:
+                for game in pgn_games:
+                    print(game, file=games_file, end="\n\n")
 
         train_loader = DataLoader(
             selfplay_dataset,
@@ -112,6 +121,7 @@ if __name__ == "__main__":
     parser.add_argument("--evaluate-after-batch", action="store_true")
     parser.add_argument("--load-model-from-file", action="store_true")
     parser.add_argument("--stockfish-binary", default=None)
+    parser.add_argument("--games-dir", default=None)
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -130,4 +140,5 @@ if __name__ == "__main__":
         stockfish_binary=args.stockfish_binary,
         max_recent_training_games=args.max_recent_training_games,
         model_file=args.model_file,
+        games_dir=args.games_dir,
     )
