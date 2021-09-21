@@ -7,6 +7,7 @@ from tqdm import tqdm
 import asyncio
 import torch.nn.functional as F
 import argparse
+import pickle
 from pathlib import Path
 
 from .ChessModel import ChessModel
@@ -55,10 +56,13 @@ def train_alphazero(
         )
 
         if games_dir:
-            out_filename = f"epoch_{epoch}_games.pgn"
-            with open(Path(games_dir) / out_filename, "w") as games_file:
+            pgn_filename = f"epoch_{epoch}_games.pgn"
+            examples_filename = f"epoch_{epoch}_examples.pkl"
+            with open(Path(games_dir) / pgn_filename, "w") as games_file:
                 for game in pgn_games:
                     print(game, file=games_file, end="\n\n")
+            with open(Path(games_dir) / examples_filename, "wb") as examples_file:
+                pickle.dump(selfplay_dataset.train_examples_history, examples_file)
 
         train_loader = DataLoader(
             selfplay_dataset,
