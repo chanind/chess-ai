@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 TOTAL_ACTION_INDICES = np.prod(ACTION_PROBS_SHAPE)
 
 CHESS_DIRICHLET_ALPHA = 0.3  # from the alpha zero paper
+DIRICHLET_NOISE_PORTION = 0.25
 
 rng = default_rng()
 
@@ -59,9 +60,7 @@ class AsyncChessMCTS:
         self.device = device
         self.loader = loader
 
-    async def get_action_probabilities(
-        self, board_wrapper, temp=1, include_noise=False
-    ):
+    async def get_action_probabilities(self, board_wrapper, temp=1):
         """
         This function performs num_simulations simulations of MCTS starting from board.
         Returns:
@@ -69,48 +68,30 @@ class AsyncChessMCTS:
                    proportional to Nsa[(s,a)]**(1./temp)
         """
         await asyncio.gather(
-            *[self.search(board_wrapper) for _ in range(self.num_simulations)]
+            *[self.search(board_wrapper, True) for _ in range(self.num_simulations)]
         )
 
         state_hash = board_wrapper.hash
         counts = np.zeros(ACTION_PROBS_SHAPE)
-        for action_index in range(TOTAL_ACTION_INDICES):
-            action_coord = unravel_action_index(action_index)
-            if (state_hash, action_coord) in self.Nsa:
-                counts[action_coord] = self.Nsa[(state_hash, action_coord)]
-
-        counts_sum = np.sum(counts)
-        probs = counts / counts_sum
-
-        # add dirichlet noise
-        if include_noise:
-            legal_moves = list(board_wrapper.board.legal_moves)
-            if len(legal_moves) > 0:
-                alphas = np.ones(len(legal_moves)) * CHESS_DIRICHLET_ALPHA
-                raw_noise_values = rng.dirichlet(alphas)
-                noise = np.zeros(ACTION_PROBS_SHAPE)
-                for index, move in enumerate(legal_moves):
-                    action = Action(move, board_wrapper.board.turn)
-                    noise[action.coords] = raw_noise_values[index]
-
-                probs = 0.5 * probs + 0.5 * noise
+        for action in board_wrapper.legal_actions:
+            if (state_hash, action.coords) in self.Nsa:
+                counts[action.coords] = self.Nsa[(state_hash, action.coords)]
 
         if temp == 0:
-            best_action_indices = np.argwhere(probs.flatten() == np.max(probs))
+            best_action_indices = np.argwhere(counts.flatten() == np.max(counts))
             chosen_action_index = np.random.choice(best_action_indices.flatten())
             chosen_action_coord = unravel_action_index(chosen_action_index)
             probs = np.zeros(ACTION_PROBS_SHAPE)
             probs[chosen_action_coord] = 1
             return probs
 
-        if temp == 1:
-            return probs
-
-        probs **= 1.0 / temp
-        probs = probs / np.sum(probs)
+        if temp != 1:
+            counts **= 1.0 / temp
+        counts_sum = np.sum(counts)
+        probs = counts / counts_sum
         return probs
 
-    async def search(self, board_wrapper: BoardWrapper):
+    async def search(self, board_wrapper: BoardWrapper, include_noise=False):
         """
         This function performs one iteration of MCTS. It is recursively called
         till a leaf node is found. The action chosen at each node is one that
@@ -162,8 +143,26 @@ class AsyncChessMCTS:
                 board_wrapper
             )
             valid_action_probs = action_probs * valid_actions_mask
-            self.Ps[state_hash] = valid_action_probs
 
+            # add dirichlet noise to action probs
+            if include_noise:
+                legal_actions = board_wrapper.legal_actions
+                alphas = np.ones(len(legal_actions)) * CHESS_DIRICHLET_ALPHA
+                raw_noise_values = rng.dirichlet(alphas)
+                noise = np.zeros(ACTION_PROBS_SHAPE)
+                for index, action in enumerate(legal_actions):
+                    noise[action.coords] = raw_noise_values[index]
+
+                valid_actions_sum = np.sum(valid_action_probs)
+                if valid_actions_sum == 0:
+                    valid_action_probs = noise
+                else:
+                    scaled_valid_action_probs = valid_action_probs / valid_actions_sum
+                    valid_action_probs = (
+                        1 - DIRICHLET_NOISE_PORTION
+                    ) * scaled_valid_action_probs + DIRICHLET_NOISE_PORTION * noise
+
+            self.Ps[state_hash] = valid_action_probs
             sum_Ps_s = np.sum(self.Ps[state_hash])
             if sum_Ps_s > 0:
                 self.Ps[state_hash] /= sum_Ps_s  # renormalize

@@ -146,12 +146,13 @@ class AlphaZeroPlayer(ChessPlayer):
         self.descr = descr
 
     async def make_move(self, board):
-        pi = await self.mcts.get_action_probabilities(BoardWrapper(board), temp=0)
+        board_wrapper = BoardWrapper(board)
+        pi = await self.mcts.get_action_probabilities(board_wrapper, temp=0)
 
         action_index = np.random.choice(pi.size, p=pi.flatten())
         action_coord = np.unravel_index(action_index, ACTION_PROBS_SHAPE)
 
-        move = find_move_from_action_coord(action_coord, board)
+        move = find_move_from_action_coord(action_coord, board_wrapper)
         return move
 
     def __str__(self):

@@ -15,12 +15,21 @@ class BoardWrapper:
     def __init__(self, board: chess.Board):
         self.board = board
         self._hash = None
+        self._legal_acctions = None
 
     @property
     def hash(self):
         if self._hash is None:
             self._hash = hash(tuple(self.board.move_stack))
         return self._hash
+
+    @property
+    def legal_actions(self) -> List[Action]:
+        if self._legal_acctions is None:
+            self._legal_acctions = [
+                Action(move, self.board.turn) for move in self.board.legal_moves
+            ]
+        return self._legal_acctions
 
     def __hash__(self):
         return self.hash
@@ -53,12 +62,10 @@ def generate_actions_mask_and_coords(
     The mask is a matrix of the size of the action outputs from the model
     where 1 means the move is valid and 0 means it's invalid
     """
-    board = board_wrapper.board
     mask = np.zeros(ACTION_PROBS_SHAPE)
     valid_actions: List[Action] = []
 
-    for move in board.legal_moves:
-        action = Action(move, board.turn)
+    for action in board_wrapper.legal_actions:
         mask[action.coords] = 1
         valid_actions.append(action)
     return mask, valid_actions

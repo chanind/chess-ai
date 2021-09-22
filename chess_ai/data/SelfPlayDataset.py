@@ -123,15 +123,13 @@ class SelfPlayDataset(Dataset):
             episode_step += 1
             temp = int(episode_step < self.temp_threshold)
 
-            pi = await mcts.get_action_probabilities(
-                board_wrapper, temp=temp, include_noise=True
-            )
+            pi = await mcts.get_action_probabilities(board_wrapper, temp=temp)
 
             action_index = np.random.choice(pi.size, p=pi.flatten())
             action_coord = unravel_action_index(action_index)
             train_examples.append((InputState(board_wrapper.board), action_index, 0))
 
-            move = find_move_from_action_coord(action_coord, board_wrapper.board)
+            move = find_move_from_action_coord(action_coord, board_wrapper)
 
             board_wrapper = get_next_board_wrapper(board_wrapper, move)
             node = node.add_variation(move)
