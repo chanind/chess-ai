@@ -36,7 +36,7 @@ class SelfPlayDataset(Dataset):
         mcts_simulations: int = 50,
         games_per_iteration: int = 100,
         max_recent_training_games: int = 200000,
-        temp_threshold: int = 15,
+        temp_threshold: int = 35,
     ):
         super().__init__()
         self.games_per_iteration = games_per_iteration
