@@ -124,6 +124,8 @@ class SelfPlayDataset(Dataset):
             temp = 1.0
             if episode_step > self.temp_threshold:
                 temp = math.exp(-1 * (episode_step - self.temp_threshold) / 10)
+            if temp < 0.05:
+                temp = 0
 
             pi = await mcts.get_action_probabilities(board_wrapper, temp=temp)
 
