@@ -13,6 +13,7 @@ tqdm = "^4.62.0"
 aiodataloader = "^0.2.0"
 cachetools = "^4.2.2"
 thespian = "^3.10.5"
+promise = "^2.3"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

@@ -22,7 +22,6 @@ class SelfPlayGamesManagerActor(Actor):
 
     def receiveMessage(self, msg, sender):
         if isinstance(msg, PlayGamesMessage):
-            print("PLAYING GAMES")
             self.play_games(
                 mcts_simulations=msg.mcts_simulations,
                 temp_threshold=msg.temp_threshold,
@@ -31,10 +30,13 @@ class SelfPlayGamesManagerActor(Actor):
                 num_games=msg.num_games,
             )
             self.play_games_sender = sender
-        if isinstance(msg, PlayGameResult):
+            print("PLAY!")
+        elif isinstance(msg, PlayGameResult):
             # got a game result!
-            print("GAME RESULT")
+            print("RESULT!")
             self.handle_game_result(msg.train_examples, msg.pgn)
+        else:
+            print("OTHER MESSAGE", msg)
 
     def handle_game_result(self, train_examples, pgn):
         self.training_examples.append(train_examples)
@@ -42,6 +44,7 @@ class SelfPlayGamesManagerActor(Actor):
         self.pbar.update(n=1)
         if len(self.training_examples) >= len(self.individual_games_actors):
             self.pbar.close()
+            print("REPLLYING TO DATASET")
             self.send(self.play_games_sender, self.training_examples, self.pgns)
             for actor in self.individual_games_actors:
                 self.send(actor, ActorExitRequest)

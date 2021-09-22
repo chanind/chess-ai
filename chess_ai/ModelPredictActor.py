@@ -1,3 +1,4 @@
+from typing import Any, Tuple
 from thespian.actors import Actor
 from dataclasses import dataclass
 import torch
@@ -13,6 +14,13 @@ class InitModelPredictActorMessage:
 @dataclass
 class PredictMessage:
     input: torch.Tensor
+    key: Any
+
+
+@dataclass
+class PredictionResultMessage:
+    output: Tuple[torch.Tensor, torch.Tensor]
+    key: Any
 
 
 class ModelPredictActor(Actor):
@@ -27,31 +35,28 @@ class ModelPredictActor(Actor):
 
     def receiveMessage(self, message, sender):
         if isinstance(message, InitModelPredictActorMessage):
-            print("INITIALIZED")
             self.model = message.model
-        else:
-            print("MESSAGE!!!", message)
         if isinstance(message, PredictMessage):
-            print("PREDICTING")
+            print("Prediction plz")
             if self.model is None:
                 raise Exception(
                     "Must first send this actor a InitModelPredictActorMessage to load the current model"
                 )
-            self.bulk_load_queue.append((message.input, sender))
+            self.bulk_load_queue.append((message, sender))
             self.send(self.myAddress, "run")
         if message == "run":
             self.batch_load()
-        print("MESSAGES PROCESSED")
 
     def batch_load(self):
         if len(self.bulk_load_queue) == 0:
             return
         print(f"BULK LOADING: {len(self.bulk_load_queue)}")
-        inputs = [data[0] for data in self.bulk_load_queue]
+        inputs = [data[0].input for data in self.bulk_load_queue]
+        keys = [data[0].key for data in self.bulk_load_queue]
         senders = [data[1] for data in self.bulk_load_queue]
         with torch.no_grad():
             pis, values = self.model.predict(torch.cat(inputs, dim=0))
         for i in range(len(inputs)):
             output = (pis[i, :, :].unsqueeze(0), values[i].unsqueeze(0))
-            self.send(senders[i], output)
+            self.send(senders[i], PredictionResultMessage(output=output, key=keys[i]))
         self.bulk_load_queue = []

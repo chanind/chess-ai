@@ -1,9 +1,11 @@
+from chess_ai.ModelPredictActor import PredictionResultMessage
 from dataclasses import dataclass
 from typing import List, Tuple
 import numpy as np
 import chess
 import chess.pgn
 import torch
+from promise import Promise
 
 # import logging
 from thespian.actors import Actor
@@ -36,17 +38,36 @@ class PlayGameResult:
 
 
 class SelfPlayGameActor(Actor):
+    pending_predictions = {}
+
     def receiveMessage(self, msg, sender):
         if isinstance(msg, PlayGameMessage):
+
+            def load_prediction(key, input):
+                def resolver(resolve, _reject):
+                    self.pending_predictions[key] = resolve
+
+                res_promise = Promise(resolver)
+                self.send(msg.model_predict_actor_addr, input)
+                return res_promise
+
             mcts = ChessMCTS(
                 device=msg.device,
-                loader=msg.model_predict_actor_addr,
+                loader=load_prediction,
                 num_simulations=msg.mcts_simulations,
             )
-            train_examples, pgn = self.selfplay_game(mcts, msg.temp_threshold)
-            self.send(sender, PlayGameResult(train_examples=train_examples, pgn=pgn))
+            self.selfplay_game(mcts, msg.temp_threshold).then(
+                lambda res: self.send(
+                    sender, PlayGameResult(train_examples=res[0], pgn=res[1])
+                )
+            )
 
-    def selfplay_game(self, mcts: ChessMCTS, temp_threshold: int):
+        if isinstance(msg, PredictionResultMessage):
+            key = msg.key
+            self.pending_predictions[key](msg.output)
+            del self.pending_predictions[key]
+
+    def selfplay_game(self, mcts: ChessMCTS, temp_threshold: int) -> Promise:
         """
         This function executes one episode of self-play, starting with player 1.
         As the game is played, each turn is added as a training example to
@@ -62,42 +83,54 @@ class SelfPlayGameActor(Actor):
         """
         train_examples = []
         board_wrapper = BoardWrapper(chess.Board())
-        episode_step = 0
 
         game = chess.pgn.Game()
         node = game
 
-        while True:
-            episode_step += 1
-            temp = int(episode_step < temp_threshold)
+        def move_until_over() -> Promise:
+            move_num = len(train_examples)
+            temp = int(move_num < temp_threshold)
 
-            pi = mcts.get_action_probabilities(board_wrapper, temp=temp)
+            def on_get_action_probabilities(pi):
+                nonlocal board_wrapper
+                nonlocal node
 
-            action_index = np.random.choice(pi.size, p=pi.flatten())
-            action_coord = unravel_action_index(action_index)
-            train_examples.append((InputState(board_wrapper.board), action_index, 0))
+                action_index = np.random.choice(pi.size, p=pi.flatten())
+                action_coord = unravel_action_index(action_index)
+                train_examples.append(
+                    (InputState(board_wrapper.board), action_index, 0)
+                )
 
-            move = find_move_from_action_coord(action_coord, board_wrapper.board)
+                move = find_move_from_action_coord(action_coord, board_wrapper.board)
+                print("Made a move!", move)
 
-            board_wrapper = get_next_board_wrapper(board_wrapper, move)
-            node = node.add_variation(move)
+                board_wrapper = get_next_board_wrapper(board_wrapper, move)
+                node = node.add_variation(move)
 
-            if board_wrapper.board.is_game_over():
-                game.headers["Result"] = board_wrapper.board.result()
-                outcome = board_wrapper.board.outcome()
-                if outcome.winner is None:
-                    return train_examples
-                result = 1 if outcome.winner == chess.WHITE else -1
+                if board_wrapper.board.is_game_over():
+                    game.headers["Result"] = board_wrapper.board.result()
+                    outcome = board_wrapper.board.outcome()
+                    if outcome.winner is None:
+                        return train_examples
+                    result = 1 if outcome.winner == chess.WHITE else -1
 
-                adjusted_train_examples = []
-                for train_example in train_examples:
-                    example_state = train_example[0]
-                    example_action = train_example[1]
-                    adjusted_train_examples.append(
-                        (
-                            example_state,
-                            example_action,
-                            result * ((-1) ** (example_state.turn == chess.BLACK)),
+                    adjusted_train_examples = []
+                    for train_example in train_examples:
+                        example_state = train_example[0]
+                        example_action = train_example[1]
+                        adjusted_train_examples.append(
+                            (
+                                example_state,
+                                example_action,
+                                result * ((-1) ** (example_state.turn == chess.BLACK)),
+                            )
                         )
-                    )
-                return adjusted_train_examples, game
+                    return adjusted_train_examples, game
+                else:
+                    return move_until_over()
+
+            return mcts.get_action_probabilities(board_wrapper, temp=temp).then(
+                on_get_action_probabilities
+            )
+
+        return move_until_over()

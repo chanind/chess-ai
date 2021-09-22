@@ -50,8 +50,7 @@ class SelfPlayDataset(Dataset):
         model_predict_loader = actor_sys.createActor(ModelPredictActor)
         actor_sys.tell(model_predict_loader, InitModelPredictActorMessage(model=model))
         self_play_manager = actor_sys.createActor(SelfPlayGamesManagerActor)
-        print("INIT THE LOADER", model_predict_loader)
-        games_training_examples, pgns = actor_sys.ask(
+        res = actor_sys.ask(
             self_play_manager,
             PlayGamesMessage(
                 mcts_simulations=self.mcts_simulations,
@@ -61,6 +60,8 @@ class SelfPlayDataset(Dataset):
                 num_games=self.games_per_iteration,
             ),
         )
+        print("REPLY!", res)
+        games_training_examples, pgns = res
         actor_sys.tell(self_play_manager, ActorExitRequest())
         actor_sys.tell(model_predict_loader, ActorExitRequest())
         self.train_examples_history = (
