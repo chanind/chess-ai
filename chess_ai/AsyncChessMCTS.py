@@ -5,7 +5,8 @@ import math
 import torch
 import asyncio
 import numpy as np
-from .translation.Action import ACTION_PROBS_SHAPE, unravel_action_index
+from numpy.random import default_rng
+from .translation.Action import ACTION_PROBS_SHAPE, Action, unravel_action_index
 from .translation.BoardWrapper import (
     BoardWrapper,
     generate_actions_mask_and_coords,
@@ -20,6 +21,10 @@ log = logging.getLogger(__name__)
 
 
 TOTAL_ACTION_INDICES = np.prod(ACTION_PROBS_SHAPE)
+
+CHESS_DIRICHLET_ALPHA = 0.3  # from the alpha zero paper
+
+rng = default_rng()
 
 
 class AsyncChessMCTS:
@@ -54,7 +59,9 @@ class AsyncChessMCTS:
         self.device = device
         self.loader = loader
 
-    async def get_action_probabilities(self, board_wrapper, temp=1):
+    async def get_action_probabilities(
+        self, board_wrapper, temp=1, include_noise=False
+    ):
         """
         This function performs num_simulations simulations of MCTS starting from board.
         Returns:
@@ -72,17 +79,35 @@ class AsyncChessMCTS:
             if (state_hash, action_coord) in self.Nsa:
                 counts[action_coord] = self.Nsa[(state_hash, action_coord)]
 
+        counts_sum = np.sum(counts)
+        probs = counts / counts_sum
+
+        # add dirichlet noise
+        if include_noise:
+            legal_moves = list(board_wrapper.board.legal_moves)
+            if len(legal_moves) > 0:
+                alphas = np.ones(len(legal_moves)) * CHESS_DIRICHLET_ALPHA
+                raw_noise_values = rng.dirichlet(alphas)
+                noise = np.zeros(ACTION_PROBS_SHAPE)
+                for index, move in enumerate(legal_moves):
+                    action = Action(move, board_wrapper.board.turn)
+                    noise[action.coords] = raw_noise_values[index]
+
+                probs = 0.5 * probs + 0.5 * noise
+
         if temp == 0:
-            best_action_indices = np.argwhere(counts.flatten() == np.max(counts))
+            best_action_indices = np.argwhere(probs.flatten() == np.max(probs))
             chosen_action_index = np.random.choice(best_action_indices.flatten())
             chosen_action_coord = unravel_action_index(chosen_action_index)
             probs = np.zeros(ACTION_PROBS_SHAPE)
             probs[chosen_action_coord] = 1
             return probs
 
-        counts **= 1.0 / temp
-        counts_sum = np.sum(counts)
-        probs = counts / counts_sum
+        if temp == 1:
+            return probs
+
+        probs **= 1.0 / temp
+        probs = probs / np.sum(probs)
         return probs
 
     async def search(self, board_wrapper: BoardWrapper):

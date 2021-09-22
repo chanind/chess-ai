@@ -14,7 +14,7 @@ from chess_ai.translation.find_move_from_action_coord import (
     InvalidMoveException,
     find_move_from_action_coord,
 )
-from chess_ai.translation.Action import unravel_action_index
+from chess_ai.translation.Action import ACTION_PROBS_SHAPE, unravel_action_index
 from chess_ai.translation.InputState import InputState
 from chess_ai.translation.BoardWrapper import BoardWrapper, get_next_board_wrapper
 from chess_ai.ChessModel import ChessModel
@@ -121,13 +121,11 @@ class SelfPlayDataset(Dataset):
 
         while True:
             episode_step += 1
-            temp = 1.0
-            if episode_step > self.temp_threshold:
-                temp = math.exp(-1 * (episode_step - self.temp_threshold) / 10)
-            if temp < 0.05:
-                temp = 0
+            temp = int(episode_step < self.temp_threshold)
 
-            pi = await mcts.get_action_probabilities(board_wrapper, temp=temp)
+            pi = await mcts.get_action_probabilities(
+                board_wrapper, temp=temp, include_noise=True
+            )
 
             action_index = np.random.choice(pi.size, p=pi.flatten())
             action_coord = unravel_action_index(action_index)
