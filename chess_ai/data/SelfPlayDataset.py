@@ -146,8 +146,8 @@ class SelfPlayDataset(Dataset):
                     pi = train_example[1]
                     adjusted_train_examples.append(
                         (
-                            state,
-                            action_index,
+                            train_example[0],
+                            train_example[1],
                             result * ((-1) ** (state.turn == chess.BLACK)),
                         )
                     )
