@@ -4,6 +4,7 @@ from torch.utils.data import Dataset
 import numpy as np
 import chess
 import chess.pgn
+import math
 import torch
 import logging
 import asyncio
@@ -113,14 +114,16 @@ class SelfPlayDataset(Dataset):
         """
         train_examples = []
         board_wrapper = BoardWrapper(chess.Board())
-        episodeStep = 0
+        episode_step = 0
 
         game = chess.pgn.Game()
         node = game
 
         while True:
-            episodeStep += 1
-            temp = int(episodeStep < self.temp_threshold)
+            episode_step += 1
+            temp = 1.0
+            if episode_step > self.temp_threshold:
+                temp = math.exp(-1 * (episode_step - self.temp_threshold) / 10)
 
             pi = await mcts.get_action_probabilities(board_wrapper, temp=temp)
 
