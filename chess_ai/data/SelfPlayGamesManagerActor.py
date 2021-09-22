@@ -34,14 +34,15 @@ class SelfPlayGamesManagerActor(Actor):
         if isinstance(msg, PlayGameResult):
             # got a game result!
             print("GAME RESULT")
-            self.handle_game_result(msg.train_examples)
+            self.handle_game_result(msg.train_examples, msg.pgn)
 
-    def handle_game_result(self, train_examples):
+    def handle_game_result(self, train_examples, pgn):
         self.training_examples.append(train_examples)
+        self.pgns.append(pgn)
         self.pbar.update(n=1)
         if len(self.training_examples) >= len(self.individual_games_actors):
             self.pbar.close()
-            self.send(self.play_games_sender, self.training_examples)
+            self.send(self.play_games_sender, self.training_examples, self.pgns)
             for actor in self.individual_games_actors:
                 self.send(actor, ActorExitRequest)
             self.individual_games_actors = None
@@ -60,6 +61,7 @@ class SelfPlayGamesManagerActor(Actor):
             self.createActor(SelfPlayGameActor) for _ in range(num_games)
         ]
         self.training_examples = []
+        self.pgns = []
         for game_actor in self.individual_games_actors:
             self.send(
                 game_actor,

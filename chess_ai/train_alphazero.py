@@ -1,3 +1,4 @@
+from typing import Optional
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -5,6 +6,8 @@ from torch import optim
 from tqdm import tqdm
 from thespian.actors import ActorSystem
 import argparse
+import pickle
+from pathlib import Path
 
 from .ChessModel import ChessModel
 from .data.SelfPlayDataset import SelfPlayDataset
@@ -34,6 +37,7 @@ def train_alphazero(
     games_per_iteration: int = 10,
     max_recent_training_games=10000,
     model_file: str = "chess_alphazero_model.pth",
+    games_dir: Optional[str] = None,
 ):
     selfplay_dataset = SelfPlayDataset(
         device,
@@ -49,7 +53,16 @@ def train_alphazero(
         train_loss = 0
         num_train_batches = 0
         model.eval()
-        selfplay_dataset.generate_self_play_data(model)
+        pgn_games = selfplay_dataset.generate_self_play_data(model)
+
+        if games_dir:
+            pgn_filename = f"epoch_{epoch}_games.pgn"
+            examples_filename = f"epoch_{epoch}_examples.pkl"
+            with open(Path(games_dir) / pgn_filename, "w") as games_file:
+                for game in pgn_games:
+                    print(game, file=games_file, end="\n\n")
+            with open(Path(games_dir) / examples_filename, "wb") as examples_file:
+                pickle.dump(selfplay_dataset.train_examples_history, examples_file)
 
         train_loader = DataLoader(
             selfplay_dataset,
@@ -62,7 +75,7 @@ def train_alphazero(
             total=len(selfplay_dataset),
             desc=f"Epoch {epoch + 1}",
         ) as pbar:
-            for (inputs, target_pis, target_value) in train_loader:
+            for (inputs, target_indices, target_value) in train_loader:
                 batch_size = inputs.shape[0]
                 optimizer.zero_grad()
                 output_pis, output_value = model(inputs.to(device))
@@ -72,7 +85,7 @@ def train_alphazero(
                     output_pis.view((batch_size, -1)),
                     # this is hacky, the target shouldn't be one-hot, so this is undoing the one hot encoding
                     # we should just directly output the one-hot pos in the dataloader rather than doing this
-                    target_pis.to(device).view((batch_size, -1)).max(dim=1)[1],
+                    target_indices.to(device),
                 )
                 loss_value = criterion_value(
                     target_value.to(device), output_value.squeeze(-1)
@@ -110,6 +123,7 @@ if __name__ == "__main__":
     parser.add_argument("--evaluate-after-batch", action="store_true")
     parser.add_argument("--load-model-from-file", action="store_true")
     parser.add_argument("--stockfish-binary", default=None)
+    parser.add_argument("--games-dir", default=None)
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -128,4 +142,5 @@ if __name__ == "__main__":
         stockfish_binary=args.stockfish_binary,
         max_recent_training_games=args.max_recent_training_games,
         model_file=args.model_file,
+        games_dir=args.games_dir,
     )

@@ -5,7 +5,6 @@ from chess_ai.data.SelfPlayGamesManagerActor import (
 from typing import Tuple
 from thespian.actors import ActorExitRequest, ActorSystem
 from torch.utils.data import Dataset
-import numpy as np
 import torch
 
 # import logging
@@ -19,7 +18,7 @@ from chess_ai.ModelPredictActor import InitModelPredictActorMessage, ModelPredic
 
 class SelfPlayDataset(Dataset):
 
-    current_training_examples: Tuple[InputState, np.ndarray, int]
+    current_training_examples: Tuple[InputState, int, int]
 
     def __init__(
         self,
@@ -52,7 +51,7 @@ class SelfPlayDataset(Dataset):
         actor_sys.tell(model_predict_loader, InitModelPredictActorMessage(model=model))
         self_play_manager = actor_sys.createActor(SelfPlayGamesManagerActor)
         print("INIT THE LOADER", model_predict_loader)
-        games_training_examples = actor_sys.ask(
+        games_training_examples, pgns = actor_sys.ask(
             self_play_manager,
             PlayGamesMessage(
                 mcts_simulations=self.mcts_simulations,
@@ -75,7 +74,7 @@ class SelfPlayDataset(Dataset):
         self.current_training_examples = []
         for examples in self.train_examples_history:
             self.current_training_examples.extend(examples)
-        return self.current_training_examples
+        return pgns
 
     def __len__(self):
         return len(self.current_training_examples)
@@ -84,6 +83,6 @@ class SelfPlayDataset(Dataset):
         input_state, pi, outcome = self.current_training_examples[idx]
         return (
             input_state.to_tensor(),
-            torch.from_numpy(pi),
+            torch.tensor(pi),
             torch.tensor(outcome, dtype=torch.float),
         )

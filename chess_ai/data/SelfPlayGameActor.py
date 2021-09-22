@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import List, Tuple
 import numpy as np
 import chess
+import chess.pgn
 import torch
 
 # import logging
@@ -31,6 +32,7 @@ class PlayGameMessage:
 @dataclass
 class PlayGameResult:
     train_examples: List[Tuple[InputState, torch.Tensor, int]]
+    pgn: chess.pgn.Game
 
 
 class SelfPlayGameActor(Actor):
@@ -41,8 +43,8 @@ class SelfPlayGameActor(Actor):
                 loader=msg.model_predict_actor_addr,
                 num_simulations=msg.mcts_simulations,
             )
-            train_examples = self.selfplay_game(mcts, msg.temp_threshold)
-            self.send(sender, PlayGameResult(train_examples=train_examples))
+            train_examples, pgn = self.selfplay_game(mcts, msg.temp_threshold)
+            self.send(sender, PlayGameResult(train_examples=train_examples, pgn=pgn))
 
     def selfplay_game(self, mcts: ChessMCTS, temp_threshold: int):
         """
@@ -60,23 +62,28 @@ class SelfPlayGameActor(Actor):
         """
         train_examples = []
         board_wrapper = BoardWrapper(chess.Board())
-        episodeStep = 0
+        episode_step = 0
+
+        game = chess.pgn.Game()
+        node = game
 
         while True:
-            episodeStep += 1
-            temp = int(episodeStep < temp_threshold)
+            episode_step += 1
+            temp = int(episode_step < temp_threshold)
 
             pi = mcts.get_action_probabilities(board_wrapper, temp=temp)
-            train_examples.append((InputState(board_wrapper.board), pi, 0))
 
             action_index = np.random.choice(pi.size, p=pi.flatten())
             action_coord = unravel_action_index(action_index)
+            train_examples.append((InputState(board_wrapper.board), action_index, 0))
 
             move = find_move_from_action_coord(action_coord, board_wrapper.board)
 
             board_wrapper = get_next_board_wrapper(board_wrapper, move)
+            node = node.add_variation(move)
 
             if board_wrapper.board.is_game_over():
+                game.headers["Result"] = board_wrapper.board.result()
                 outcome = board_wrapper.board.outcome()
                 if outcome.winner is None:
                     return train_examples
@@ -84,13 +91,13 @@ class SelfPlayGameActor(Actor):
 
                 adjusted_train_examples = []
                 for train_example in train_examples:
-                    state = train_example[0]
-                    pi = train_example[1]
+                    example_state = train_example[0]
+                    example_action = train_example[1]
                     adjusted_train_examples.append(
                         (
-                            state,
-                            pi,
-                            result * ((-1) ** (state.turn == chess.BLACK)),
+                            example_state,
+                            example_action,
+                            result * ((-1) ** (example_state.turn == chess.BLACK)),
                         )
                     )
-                return adjusted_train_examples
+                return adjusted_train_examples, game
