@@ -67,9 +67,8 @@ class AsyncChessMCTS:
             probs: a policy vector where the probability of the ith action is
                    proportional to Nsa[(s,a)]**(1./temp)
         """
-        await asyncio.gather(
-            *[self.search(board_wrapper, True) for _ in range(self.num_simulations)]
-        )
+        for _ in range(self.num_simulations):
+            await self.search(board_wrapper, True)
 
         state_hash = board_wrapper.hash
         counts = np.zeros(ACTION_PROBS_SHAPE)
@@ -203,9 +202,10 @@ class AsyncChessMCTS:
                 best_action_score = score
                 best_action = action
 
-        # TODO: this might be slow to copy the whole board, try seeing if we can get away with pushing / popping afterwards in the future
-        next_board_wrapper = get_next_board_wrapper(board_wrapper, best_action.move)
+        next_board_wrapper = BoardWrapper(board)
+        board.push(best_action.move)
         value = await self.search(next_board_wrapper)
+        board.pop()
 
         if (state_hash, best_action.coords) in self.Qsa:
             self.Qsa[(state_hash, best_action.coords)] = (

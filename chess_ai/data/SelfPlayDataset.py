@@ -131,7 +131,8 @@ class SelfPlayDataset(Dataset):
 
             move = find_move_from_action_coord(action_coord, board_wrapper)
 
-            board_wrapper = get_next_board_wrapper(board_wrapper, move)
+            board_wrapper.board.push(move)
+            board_wrapper = BoardWrapper(board_wrapper.board)
             node = node.add_variation(move)
 
             if board_wrapper.board.is_game_over():
