@@ -17,7 +17,7 @@ class MockModel:
 
 @pytest.mark.asyncio
 async def test_SelfPlayDataset_inputs_and_outputs():
-    dataset = SelfPlayDataset("cpu", mcts_simulations=2, games_per_iteration=3)
+    dataset = SelfPlayDataset("cpu", mcts_simulations=10, games_per_iteration=10)
     # just return random scores
     model = MockModel()
     await dataset.generate_self_play_data(model)

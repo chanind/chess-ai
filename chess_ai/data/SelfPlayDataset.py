@@ -4,7 +4,6 @@ from torch.utils.data import Dataset
 import numpy as np
 import chess
 import chess.pgn
-import math
 import torch
 import logging
 import asyncio
@@ -16,7 +15,7 @@ from chess_ai.translation.find_move_from_action_coord import (
 )
 from chess_ai.translation.Action import ACTION_PROBS_SHAPE, unravel_action_index
 from chess_ai.translation.InputState import InputState
-from chess_ai.translation.BoardWrapper import BoardWrapper, get_next_board_wrapper
+from chess_ai.translation.board_helpers import get_board_hash, get_next_board_hash
 from chess_ai.ChessModel import ChessModel
 from chess_ai.AsyncChessMCTS import AsyncChessMCTS
 from chess_ai.AsyncPredictDataLoader import AsyncPredictDataLoader
@@ -113,7 +112,8 @@ class SelfPlayDataset(Dataset):
                            the player eventually won the game, else -1.
         """
         train_examples = []
-        board_wrapper = BoardWrapper(chess.Board())
+        board = chess.Board()
+        board_hash = get_board_hash(board)
         episode_step = 0
 
         game = chess.pgn.Game()
@@ -123,21 +123,21 @@ class SelfPlayDataset(Dataset):
             episode_step += 1
             temp = int(episode_step < self.temp_threshold)
 
-            pi = await mcts.get_action_probabilities(board_wrapper, temp=temp)
+            pi = await mcts.get_action_probabilities(board_hash, board, temp=temp)
 
             action_index = np.random.choice(pi.size, p=pi.flatten())
             action_coord = unravel_action_index(action_index)
-            train_examples.append((InputState(board_wrapper.board), action_index, 0))
+            train_examples.append((InputState(board), action_index, 0))
 
-            move = find_move_from_action_coord(action_coord, board_wrapper)
+            move = find_move_from_action_coord(action_coord, board_hash, board)
 
-            board_wrapper.board.push(move)
-            board_wrapper = BoardWrapper(board_wrapper.board)
+            board_hash = get_next_board_hash(board_hash, move)
+            board.push(move)
             node = node.add_variation(move)
 
-            if board_wrapper.board.is_game_over():
-                game.headers["Result"] = board_wrapper.board.result()
-                outcome = board_wrapper.board.outcome()
+            if board.is_game_over():
+                game.headers["Result"] = board.result()
+                outcome = board.outcome()
                 if outcome.winner is None:
                     return train_examples, game
                 result = 1 if outcome.winner == chess.WHITE else -1

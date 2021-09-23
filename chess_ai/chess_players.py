@@ -4,10 +4,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from .translation.InputState import InputState
-from .translation.BoardWrapper import BoardWrapper
+from .translation.board_helpers import get_board_hash
 from .translation.Action import ACTION_PROBS_SHAPE
-from .ChessModel import ChessModel
 from .AsyncChessMCTS import AsyncChessMCTS
 from .translation.model_output_to_chess_move import model_output_to_chess_move
 from .translation.find_move_from_action_coord import find_move_from_action_coord
@@ -146,13 +144,13 @@ class AlphaZeroPlayer(ChessPlayer):
         self.descr = descr
 
     async def make_move(self, board):
-        board_wrapper = BoardWrapper(board)
-        pi = await self.mcts.get_action_probabilities(board_wrapper, temp=0)
+        board_hash = get_board_hash(board)
+        pi = await self.mcts.get_action_probabilities(board_hash, board, temp=0)
 
         action_index = np.random.choice(pi.size, p=pi.flatten())
         action_coord = np.unravel_index(action_index, ACTION_PROBS_SHAPE)
 
-        move = find_move_from_action_coord(action_coord, board_wrapper)
+        move = find_move_from_action_coord(action_coord, board_hash, board)
         return move
 
     def __str__(self):

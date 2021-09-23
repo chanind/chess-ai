@@ -3,14 +3,13 @@
 import logging
 import math
 import torch
-import asyncio
 import numpy as np
 from numpy.random import default_rng
-from .translation.Action import ACTION_PROBS_SHAPE, Action, unravel_action_index
-from .translation.BoardWrapper import (
-    BoardWrapper,
+from .translation.Action import ACTION_PROBS_SHAPE, unravel_action_index
+from .translation.board_helpers import (
     generate_actions_mask_and_coords,
-    get_next_board_wrapper,
+    get_legal_actions,
+    get_next_board_hash,
     get_board_input_tensor,
 )
 from .AsyncPredictDataLoader import AsyncPredictDataLoader
@@ -60,7 +59,7 @@ class AsyncChessMCTS:
         self.device = device
         self.loader = loader
 
-    async def get_action_probabilities(self, board_wrapper, temp=1):
+    async def get_action_probabilities(self, board_hash, board, temp=1):
         """
         This function performs num_simulations simulations of MCTS starting from board.
         Returns:
@@ -68,13 +67,12 @@ class AsyncChessMCTS:
                    proportional to Nsa[(s,a)]**(1./temp)
         """
         for _ in range(self.num_simulations):
-            await self.search(board_wrapper, True)
+            await self.search(board_hash, board, True)
 
-        state_hash = board_wrapper.hash
         counts = np.zeros(ACTION_PROBS_SHAPE)
-        for action in board_wrapper.legal_actions:
-            if (state_hash, action.coords) in self.Nsa:
-                counts[action.coords] = self.Nsa[(state_hash, action.coords)]
+        for action in get_legal_actions(board_hash, board):
+            if (board_hash, action.coords) in self.Nsa:
+                counts[action.coords] = self.Nsa[(board_hash, action.coords)]
 
         if temp == 0:
             best_action_indices = np.argwhere(counts.flatten() == np.max(counts))
@@ -90,7 +88,7 @@ class AsyncChessMCTS:
         probs = counts / counts_sum
         return probs
 
-    async def search(self, board_wrapper: BoardWrapper, include_noise=False):
+    async def search(self, board_hash, board, include_noise=False):
         """
         This function performs one iteration of MCTS. It is recursively called
         till a leaf node is found. The action chosen at each node is one that
@@ -107,45 +105,42 @@ class AsyncChessMCTS:
             v: the negative of the value of the current board
         """
 
-        state_hash = board_wrapper.hash
-        board = board_wrapper.board
-
-        if state_hash not in self.Es:
-            self.Es[state_hash] = None
+        if board_hash not in self.Es:
+            self.Es[board_hash] = None
             if board.is_game_over():
                 outcome = board.outcome()
                 if outcome.winner is None:
-                    self.Es[state_hash] = 0
+                    self.Es[board_hash] = 0
                 else:
-                    self.Es[state_hash] = 1 if outcome.winner == board.turn else -1
-        if self.Es[state_hash] is not None:
+                    self.Es[board_hash] = 1 if outcome.winner == board.turn else -1
+        if self.Es[board_hash] is not None:
             # terminal node
-            return -self.Es[state_hash]
+            return -self.Es[board_hash]
 
-        if state_hash in self.loadingCoros:
-            await self.loadingCoros[state_hash]
-        if state_hash not in self.Ps:
+        if board_hash in self.loadingCoros:
+            await self.loadingCoros[board_hash]
+        if board_hash not in self.Ps:
             # leaf node
             loadingCoro = self.loader.load(
-                get_board_input_tensor(board_wrapper).unsqueeze(0).to(self.device)
+                get_board_input_tensor(board_hash, board).unsqueeze(0).to(self.device)
             )
-            self.loadingCoros[state_hash] = loadingCoro
+            self.loadingCoros[board_hash] = loadingCoro
             action_probs_tensor, value_tensor = await loadingCoro
             del self.loadingCoros[
-                state_hash
+                board_hash
             ]  # remove this from loading coros list so we don't block any other loads
 
             # TODO: does it make more sense to keep everything in pytorch tensors?
             action_probs = action_probs_tensor[0].detach().cpu().numpy()
             value = value_tensor[0].detach().cpu().numpy()
             valid_actions_mask, valid_actions = generate_actions_mask_and_coords(
-                board_wrapper
+                board_hash, board
             )
             valid_action_probs = action_probs * valid_actions_mask
 
             # add dirichlet noise to action probs
             if include_noise:
-                legal_actions = board_wrapper.legal_actions
+                legal_actions = get_legal_actions(board_hash, board)
                 alphas = np.ones(len(legal_actions)) * CHESS_DIRICHLET_ALPHA
                 raw_noise_values = rng.dirichlet(alphas)
                 noise = np.zeros(ACTION_PROBS_SHAPE)
@@ -161,63 +156,63 @@ class AsyncChessMCTS:
                         1 - DIRICHLET_NOISE_PORTION
                     ) * scaled_valid_action_probs + DIRICHLET_NOISE_PORTION * noise
 
-            self.Ps[state_hash] = valid_action_probs
-            sum_Ps_s = np.sum(self.Ps[state_hash])
+            self.Ps[board_hash] = valid_action_probs
+            sum_Ps_s = np.sum(self.Ps[board_hash])
             if sum_Ps_s > 0:
-                self.Ps[state_hash] /= sum_Ps_s  # renormalize
+                self.Ps[board_hash] /= sum_Ps_s  # renormalize
             else:
                 # if all valid moves were masked make all valid moves equally probable
 
                 # NB! All valid moves may be masked if either your model architecture is insufficient or you've get overfitting or something else.
                 # If you have got dozens or hundreds of these messages you should pay attention to your model and/or training process.
                 log.error("All valid moves were masked, doing a workaround.")
-                self.Ps[state_hash] = valid_action_probs + valid_actions_mask
-                self.Ps[state_hash] /= np.sum(self.Ps[state_hash])
+                self.Ps[board_hash] = valid_action_probs + valid_actions_mask
+                self.Ps[board_hash] /= np.sum(self.Ps[board_hash])
 
-            self.Vs[state_hash] = valid_actions
-            self.Ns[state_hash] = 0
+            self.Vs[board_hash] = valid_actions
+            self.Ns[board_hash] = 0
 
             return -value
 
-        valid_actions = self.Vs[state_hash]
+        valid_actions = self.Vs[board_hash]
         best_action_score = -float("inf")
         best_action = None
 
         # pick the action with the highest upper confidence bound
         for action in valid_actions:
-            if (state_hash, action.coords) in self.Qsa:
-                qval = self.Qsa[(state_hash, action.coords)]
-                action_prob = self.Ps[state_hash][action.coords]
+            if (board_hash, action.coords) in self.Qsa:
+                qval = self.Qsa[(board_hash, action.coords)]
+                action_prob = self.Ps[board_hash][action.coords]
                 score = qval + self.cpuct * action_prob * math.sqrt(
-                    self.Ns[state_hash]
-                ) / (1 + self.Nsa[(state_hash, action.coords)])
+                    self.Ns[board_hash]
+                ) / (1 + self.Nsa[(board_hash, action.coords)])
             else:
                 score = (
                     self.cpuct
-                    * self.Ps[state_hash][action.coords]
-                    * math.sqrt(self.Ns[state_hash] + EPS)
+                    * self.Ps[board_hash][action.coords]
+                    * math.sqrt(self.Ns[board_hash] + EPS)
                 )  # Q = 0 ?
 
             if score > best_action_score:
                 best_action_score = score
                 best_action = action
 
-        next_board_wrapper = BoardWrapper(board)
+        next_board_hash = get_next_board_hash(board_hash, best_action.move)
         board.push(best_action.move)
-        value = await self.search(next_board_wrapper)
+        value = await self.search(next_board_hash, board)
         board.pop()
 
-        if (state_hash, best_action.coords) in self.Qsa:
-            self.Qsa[(state_hash, best_action.coords)] = (
-                self.Nsa[(state_hash, best_action.coords)]
-                * self.Qsa[(state_hash, best_action.coords)]
+        if (board_hash, best_action.coords) in self.Qsa:
+            self.Qsa[(board_hash, best_action.coords)] = (
+                self.Nsa[(board_hash, best_action.coords)]
+                * self.Qsa[(board_hash, best_action.coords)]
                 + value
-            ) / (self.Nsa[(state_hash, best_action.coords)] + 1)
-            self.Nsa[(state_hash, best_action.coords)] += 1
+            ) / (self.Nsa[(board_hash, best_action.coords)] + 1)
+            self.Nsa[(board_hash, best_action.coords)] += 1
 
         else:
-            self.Qsa[(state_hash, best_action.coords)] = value
-            self.Nsa[(state_hash, best_action.coords)] = 1
+            self.Qsa[(board_hash, best_action.coords)] = value
+            self.Nsa[(board_hash, best_action.coords)] = 1
 
-        self.Ns[state_hash] += 1
+        self.Ns[board_hash] += 1
         return -value
