@@ -133,7 +133,7 @@ class MinmaxPlayer(ChessPlayer):
 
 
 class AlphaZeroPlayer(ChessPlayer):
-    def __init__(self, model, device, descr=None, num_simulations=50):
+    def __init__(self, model, device, descr=None, num_simulations=200):
         self.model = model.to(device)
         self.mcts = AsyncChessMCTS(
             AsyncPredictDataLoader(model),
