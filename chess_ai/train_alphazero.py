@@ -34,6 +34,8 @@ def train_alphazero(
     games_per_iteration: int = 10,
     max_recent_training_games=10000,
     model_file: str = "chess_alphazero_model.pth",
+    training_samples_file: str = "chess_alphazero_train_samples.pkl",
+    load_training_samples_from_file: bool = False,
     games_dir: Optional[str] = None,
 ):
     selfplay_dataset = SelfPlayDataset(
@@ -42,6 +44,12 @@ def train_alphazero(
         games_per_iteration=games_per_iteration,
         max_recent_training_games=max_recent_training_games,
     )
+
+    if load_training_samples_from_file:
+        with open(training_samples_file, "rb") as examples_file:
+            train_examples_history = pickle.load(examples_file)
+            selfplay_dataset.set_train_examples_history(train_examples_history)
+
     optimizer = optim.Adam(model.parameters())
 
     model.to(device)
@@ -63,6 +71,9 @@ def train_alphazero(
                     print(game, file=games_file, end="\n\n")
             with open(Path(games_dir) / examples_filename, "wb") as examples_file:
                 pickle.dump(selfplay_dataset.train_examples_history, examples_file)
+
+        with open(training_samples_file, "wb") as examples_file:
+            pickle.dump(selfplay_dataset.train_examples_history, examples_file)
 
         train_loader = DataLoader(
             selfplay_dataset,
@@ -118,12 +129,16 @@ def train_alphazero(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-file", default="chess_alphazero_model.pth")
+    parser.add_argument(
+        "--training-samples-file", default="chess_alphazero_training_samples.pkl"
+    )
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--games-per-iteration", type=int, default=100)
     parser.add_argument("--mcts-simulations", type=int, default=15)
     parser.add_argument("--max-recent-training-games", type=int, default=1000)
     parser.add_argument("--evaluate-after-batch", action="store_true")
     parser.add_argument("--load-model-from-file", action="store_true")
+    parser.add_argument("--load-training-samples-from-file", action="store_true")
     parser.add_argument("--stockfish-binary", default=None)
     parser.add_argument("--games-dir", default=None)
     args = parser.parse_args()
@@ -145,4 +160,6 @@ if __name__ == "__main__":
         max_recent_training_games=args.max_recent_training_games,
         model_file=args.model_file,
         games_dir=args.games_dir,
+        training_samples_file=args.training_samples_file,
+        load_training_samples_from_file=args.load_training_samples_from_file,
     )

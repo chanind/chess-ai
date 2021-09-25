@@ -46,6 +46,9 @@ class SelfPlayDataset(Dataset):
         self.current_training_examples = []
         self.device = device
 
+    def set_train_examples_history(self, train_examples_history):
+        self.train_examples_history = train_examples_history
+
     async def generate_self_play_data(self, model: ChessModel, batch_size=None):
         """
         Performs numIters iterations with numEps episodes of self-play in each
