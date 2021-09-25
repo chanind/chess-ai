@@ -165,7 +165,8 @@ class AsyncChessMCTS:
 
                 # NB! All valid moves may be masked if either your model architecture is insufficient or you've get overfitting or something else.
                 # If you have got dozens or hundreds of these messages you should pay attention to your model and/or training process.
-                log.error("All valid moves were masked, doing a workaround.")
+                # log.error("All valid moves were masked, doing a workaround.")
+                print("x", end="")
                 self.Ps[board_hash] = valid_action_probs + valid_actions_mask
                 self.Ps[board_hash] /= np.sum(self.Ps[board_hash])
 
